@@ -1,0 +1,132 @@
+// The heart of the engine: a case is a DATA FILE, not hardcoded logic.
+// This module lives under functions/ and is therefore worker-only — Vite never
+// bundles it, so groundTruth/stages/scoring can never leak into the browser.
+// The browser only ever sees the projection returned by toPublicCase().
+
+import { z } from "zod";
+
+// One fixed vital set per stage. Keys are stable so the client vital panel and
+// the prompt formatter can render them without guessing.
+export const VitalsSchema = z.object({
+  HR: z.number(),
+  RR: z.number(),
+  TempC: z.number(),
+  SBP: z.number(),
+  SpO2: z.number(),
+  pain: z.number(),
+});
+
+export const StageSchema = z.object({
+  id: z.string(), // "S0", "S1", ...
+  // Deterministic trigger: total accumulated sim-minutes without definitive
+  // action. stageOf() picks the last stage whose trigger has been reached.
+  triggerAtAccumulatedDelayMin: z.number(),
+  vitals: VitalsSchema,
+  examFindings: z.string(), // handed to the model as ground reality
+  // Fixed lab/imaging result strings keyed by action id. The model may only
+  // narrate these verbatim, and only for tests the player actually ordered —
+  // the anti-hallucination fence for every number on screen.
+  labs: z.record(z.string()),
+  pas: z.number().nullable(),
+  pasBreakdown: z.string(), // component-by-component arithmetic, for the debrief
+  narrativeCue: z.string(), // what the world should convey (incl. false relief)
+});
+
+export const CaseSpecSchema = z.object({
+  id: z.string(),
+  version: z.string(),
+  domain: z.string(), // "pediatric_surgery" | "endocrine_emergency" | ...
+  axis: z.enum(["diagnosis", "management"]),
+  title: z.string(), // player-visible — must never hint at the diagnosis
+  vignette: z.string(), // player-visible opening, in the mother's voice
+  patient: z.object({
+    name: z.string(),
+    ageYears: z.number(),
+    sex: z.enum(["male", "female"]),
+    weightKg: z.number(),
+  }),
+  vitalsCatalog: z.array(
+    z.object({
+      key: VitalsSchema.keyof(),
+      label: z.string(),
+      unit: z.string(),
+      normalLow: z.number(),
+      normalHigh: z.number(),
+      criticalLow: z.number().nullable(),
+      criticalHigh: z.number().nullable(),
+    }),
+  ),
+  resourceProfile: z.object({
+    id: z.string(),
+    label: z.string(),
+    available: z.array(z.string()),
+    unavailable: z.array(z.string()),
+    referralMinutes: z.number(),
+  }),
+  // The signature UI. A render-ready view of resourceProfile.
+  constraintBoard: z.array(
+    z.object({
+      key: z.string(),
+      label: z.string(),
+      status: z.enum(["available", "unavailable", "delayed"]),
+      detail: z.string(),
+    }),
+  ),
+  actionCatalog: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      baseTimeCostMinutes: z.number(), // the CODE advances the clock by this
+      requiresResource: z.string().nullable(), // unavailable resource -> refuse
+    }),
+  ),
+  stages: z.array(StageSchema).min(1),
+
+  // ---- SECRET from here down: never include in toPublicCase() ----
+  groundTruth: z.object({
+    diagnosis: z.string(),
+    diagnosisLabel: z.string(),
+    mimics: z.array(
+      z.object({ label: z.string(), distinguisher: z.string() }),
+    ),
+    pitfalls: z.array(z.string()),
+  }),
+  scoringSignals: z.object({
+    referTargetByMin: z.number(), // referral initiated before this = full marks
+    forbiddenResources: z.array(z.string()),
+  }),
+  debrief: z.object({
+    goals: z.array(z.string()),
+    ctContrastText: z.string(), // Profile B lives ONLY as this paragraph
+  }),
+  safety: z.object({
+    illustrative: z.literal(true),
+    redLines: z.array(z.string()),
+  }),
+});
+
+export type CaseSpec = z.infer<typeof CaseSpecSchema>;
+export type Stage = z.infer<typeof StageSchema>;
+export type Vitals = z.infer<typeof VitalsSchema>;
+
+// Everything the browser is allowed to know: the opening state of the world.
+// No stages (future physiology = spoiler), no groundTruth, no scoring, no
+// debrief. initialVitals is S0's set — visible on the monitor at arrival.
+export function toPublicCase(spec: CaseSpec) {
+  return {
+    id: spec.id,
+    version: spec.version,
+    title: spec.title,
+    axis: spec.axis,
+    vignette: spec.vignette,
+    patient: spec.patient,
+    vitalsCatalog: spec.vitalsCatalog,
+    initialVitals: spec.stages[0].vitals,
+    resourceProfile: spec.resourceProfile,
+    constraintBoard: spec.constraintBoard,
+    actionCatalog: spec.actionCatalog,
+    safety: spec.safety,
+  };
+}
+
+export type PublicCase = ReturnType<typeof toPublicCase>;
