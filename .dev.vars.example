@@ -1,0 +1,6 @@
+# Copy this file to `.dev.vars` (git-ignored) and fill in your key.
+# NEVER commit a real key. In production the key is a Cloudflare Pages secret.
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Optional: override the model (default is claude-sonnet-5).
+# MODEL_ID=claude-sonnet-5
