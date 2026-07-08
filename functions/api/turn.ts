@@ -1,13 +1,24 @@
 /// <reference types="@cloudflare/workers-types" />
 
 // The trust boundary. The API key lives ONLY here (a Cloudflare secret) and
-// never reaches the browser. As of Day 1 this is the world-engine call: the
-// worker owns the secret case-spec, computes the deterministic stage, builds
-// the system prompt, and streams Claude's plain-text narration back.
+// never reaches the browser. As of Day 2 this is the full core-loop call: the
+// worker resolves the turn (clock advance, order log, referral, end-of-case),
+// computes the deterministic stage, builds the system prompt, streams Claude's
+// plain-text narration back, and hands the client the new sim state in the
+// X-Salus-State response header. The client displays; the worker owns.
 
 import { z } from "zod";
 import { DEFAULT_CASE_ID, getCase } from "../cases";
-import { buildSystemPrompt, OPENING_INSTRUCTION } from "../lib/prompt";
+import {
+  OrderedEntrySchema,
+  resolveTurn,
+  type TurnResolution,
+} from "../lib/loop";
+import {
+  buildSystemPrompt,
+  composeTurnMessage,
+  OPENING_INSTRUCTION,
+} from "../lib/prompt";
 import { clampClock, maxClockOf, stageOf } from "../lib/stage";
 
 interface Env {
@@ -15,20 +26,47 @@ interface Env {
   MODEL_ID?: string;
 }
 
+const HistoryMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().min(1).max(6000),
+});
+
 const TurnRequestSchema = z.object({
   caseId: z.string().default(DEFAULT_CASE_ID),
-  // Sim-minutes elapsed so far. The CLIENT displays the clock but the WORKER
-  // owns the physiology: elapsed -> stage -> vitals, deterministically.
-  elapsedMin: z.number().finite().default(0),
-  // "present" = the case-opening narration; "free" = a free-text player turn
-  // (the Day 2 core loop will build on this).
+  // "present" = the case-opening narration; "free" = a player turn.
   intent: z.enum(["present", "free"]).default("present"),
   playerInput: z.string().trim().min(1).max(2000).optional(),
-  // Action ids the player has actually ordered — the worker only hands the
-  // model lab strings for these (lab gating lives in code, not the prompt).
-  orderedActions: z.array(z.string()).max(50).default([]),
+  // Quick-action buttons clicked this turn (validated against the catalog).
+  clickedActions: z.array(z.string()).max(8).default([]),
+  // Sim-minutes elapsed BEFORE this turn. The client displays the clock but
+  // the WORKER advances it — elapsed -> stage -> vitals, deterministically.
+  elapsedMin: z.number().finite().default(0),
+  // Every completed order so far, with the minute its sample was taken.
+  // Generous cap + server-side truncation below — never a hard 400 lock.
+  orderedLog: z.array(OrderedEntrySchema).max(1000).default([]),
   referralStartedAtMin: z.number().finite().nullable().default(null),
+  // Prior narration, client-held (the worker is stateless). Roles are
+  // normalized into a strictly alternating Anthropic messages array below.
+  history: z.array(HistoryMessageSchema).max(40).default([]),
 });
+
+// Everything the browser needs after a turn: authoritative clock, the vitals
+// the bedside monitor shows NOW, and what the turn registered. Current-stage
+// data only — future stages, ground truth and scoring never leave the worker.
+function stateHeader(spec: Parameters<typeof stageOf>[0], res: TurnResolution) {
+  const stage = stageOf(spec, res.elapsedMin);
+  return JSON.stringify({
+    elapsedMin: res.elapsedMin,
+    turnCostMin: res.turnCostMin,
+    registeredActions: res.turnActions,
+    vitals: stage.vitals,
+    orderedLog: res.orderedLog,
+    referralStartedAtMin: res.referralStartedAtMin,
+    pendingReferral: res.pendingReferral,
+    caseOver: res.caseOver,
+    endReason: res.endReason,
+  });
+}
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   let parsed: z.infer<typeof TurnRequestSchema>;
@@ -41,29 +79,83 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const spec = getCase(parsed.caseId);
   if (!spec) return new Response("Unknown case", { status: 404 });
 
-  if (parsed.intent === "free" && !parsed.playerInput) {
-    return new Response("playerInput required for a free turn", {
-      status: 400,
+  let resolution: TurnResolution;
+  let userMessage: string;
+
+  if (parsed.intent === "present") {
+    // Opening the case costs nothing: the arrival scene IS minute zero.
+    resolution = {
+      turnActions: [],
+      turnCostMin: 0,
+      elapsedMin: 0,
+      orderedLog: [],
+      referralStartedAtMin: null,
+      pendingReferral: false,
+      caseOver: false,
+      endReason: null,
+    };
+    userMessage = OPENING_INSTRUCTION;
+  } else {
+    if (!parsed.playerInput && parsed.clickedActions.length === 0) {
+      return new Response("playerInput or clickedActions required", {
+        status: 400,
+      });
+    }
+    // The case is over once referral is initiated or the clock ceiling hit —
+    // further turns belong to the debrief system (Day 3), not the world.
+    const clamped = clampClock(parsed.elapsedMin, maxClockOf(spec));
+    if (parsed.referralStartedAtMin !== null || clamped >= maxClockOf(spec)) {
+      return new Response("The case has already ended", { status: 409 });
+    }
+    // Sanitize the client-held log: cap the size (never a hard lock) and
+    // clamp every sample time to the current clock — a forged future atMin
+    // would otherwise pull future-stage lab strings into the prompt.
+    const safeLog = parsed.orderedLog
+      .slice(-200)
+      .map((e) => ({ id: e.id, atMin: clampClock(e.atMin, clamped) }));
+    resolution = resolveTurn(spec, {
+      elapsedMin: clamped,
+      clickedActions: parsed.clickedActions,
+      playerInput: parsed.playerInput,
+      orderedLog: safeLog,
+      referralStartedAtMin: parsed.referralStartedAtMin,
     });
+    userMessage = composeTurnMessage(
+      parsed.playerInput,
+      resolution.turnActions,
+      resolution.turnCostMin,
+    );
   }
 
-  const elapsed = clampClock(parsed.elapsedMin, maxClockOf(spec));
-  const stage = stageOf(spec, elapsed);
+  const stage = stageOf(spec, resolution.elapsedMin);
   const system = buildSystemPrompt(
     spec,
     stage,
-    elapsed,
-    parsed.intent === "present" ? [] : parsed.orderedActions,
-    parsed.referralStartedAtMin,
+    resolution.elapsedMin,
+    resolution.orderedLog,
+    resolution.referralStartedAtMin,
   );
-  const userMessage =
-    parsed.intent === "present" ? OPENING_INSTRUCTION : parsed.playerInput!;
+
+  // The opening instruction is re-prepended on every turn so the transcript
+  // the model sees starts the same way it was generated, and the array stays
+  // strictly user/assistant-alternating regardless of client input.
+  const messages = mergeAlternating([
+    { role: "user" as const, content: OPENING_INSTRUCTION },
+    ...parsed.history,
+    { role: "user" as const, content: userMessage },
+  ]);
+
+  const headers = {
+    "content-type": "text/plain; charset=utf-8",
+    "cache-control": "no-store",
+    "x-salus-state": stateHeader(spec, resolution),
+  };
 
   const apiKey = ctx.env.ANTHROPIC_API_KEY;
 
-  // Keyless local fallback: still stream, so the transport and UI can be
-  // exercised end-to-end without a real Anthropic call.
-  if (!apiKey) return streamMock();
+  // Keyless local fallback: still stream AND still return real sim state, so
+  // the whole loop is playable end-to-end without an Anthropic call.
+  if (!apiKey) return streamMock(parsed.intent, resolution, headers);
 
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -80,7 +172,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       // `thinking` would silently run adaptive and add latency.
       thinking: { type: "disabled" },
       system,
-      messages: [{ role: "user", content: userMessage }],
+      messages,
     }),
   });
 
@@ -92,13 +184,26 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     });
   }
 
-  return new Response(anthropicSseToText(upstream.body), {
-    headers: {
-      "content-type": "text/plain; charset=utf-8",
-      "cache-control": "no-store",
-    },
-  });
+  return new Response(anthropicSseToText(upstream.body), { headers });
 };
+
+// Anthropic requires strictly alternating user/assistant messages starting
+// with user. Client history is untrusted — consecutive same-role entries are
+// merged, and a leading assistant entry is absorbed by the prepended opener.
+function mergeAlternating(
+  entries: { role: "user" | "assistant"; content: string }[],
+): { role: "user" | "assistant"; content: string }[] {
+  const merged: { role: "user" | "assistant"; content: string }[] = [];
+  for (const entry of entries) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === entry.role) {
+      last.content += `\n\n${entry.content}`;
+    } else {
+      merged.push({ ...entry });
+    }
+  }
+  return merged;
+}
 
 // Parse Anthropic's SSE and re-emit only the text deltas as a plain-text
 // stream — no SSE or JSON parsing needed on the client.
@@ -148,14 +253,23 @@ function anthropicSseToText(
   });
 }
 
-function streamMock(): Response {
+function streamMock(
+  intent: "present" | "free",
+  resolution: TurnResolution,
+  headers: Record<string, string>,
+): Response {
   const encoder = new TextEncoder();
-  const words = (
-    "The ward is quiet except for a fan turning somewhere down the corridor. " +
-    "A nurse waves you over: a mother stands by the stretcher, a boy curled " +
-    "on his side under a blanket. (Local mock — add your API key to " +
-    ".dev.vars to stream the real world engine.)"
-  ).split(" ");
+  const text =
+    intent === "present"
+      ? "The ward is quiet except for a fan turning somewhere down the " +
+        "corridor. A nurse waves you over: a mother stands by the stretcher, " +
+        "a boy curled on his side under a blanket. (Local mock — add your " +
+        "API key to .dev.vars to stream the real world engine.)"
+      : `The night moves on. Your orders are carried out; the clock reads ` +
+        `minute ${Math.round(resolution.elapsedMin)} and the child shifts on ` +
+        `the stretcher. (Local mock — the real world engine would narrate ` +
+        `this turn.)`;
+  const words = text.split(" ");
   const stream = new ReadableStream({
     async start(controller) {
       for (const w of words) {
@@ -165,10 +279,5 @@ function streamMock(): Response {
       controller.close();
     },
   });
-  return new Response(stream, {
-    headers: {
-      "content-type": "text/plain; charset=utf-8",
-      "cache-control": "no-store",
-    },
-  });
+  return new Response(stream, { headers });
 }

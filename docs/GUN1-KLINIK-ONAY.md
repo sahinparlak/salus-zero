@@ -1,5 +1,10 @@
 # Gün 1 — Klinik Onay Listesi (Dr. Şahin Parlak)
 
+> **✅ ONAY (2026-07-08, Gün 2):** Dr. Şahin Parlak 15 maddenin tamamını
+> mevcut haliyle onayladı ("şimdilik bir şey düzeltmeyeceğim"). Değerler
+> DRAFT statüsünden ONAYLI statüsüne geçti; submit öncesi son okuma hakkı
+> saklı.
+
 > Vaka içeriği 2026-07-08'de 7-ajanlı bir workflow ile yazıldı ve 3 mercekten
 > (klinik doğruluk · güvenlik/sızıntı · kapsam) adversarial denetimden geçti
 > (32 bulgu, 25 düzeltme). **Her klinik değer TASLAK'tır** — aşağıdaki kalemler
@@ -50,6 +55,19 @@
 12. **Sim-saat sıkıştırma oranı** + ekrandaki "ACCELERATED SIMULATION" damgası.
 13. **S2 tek "an" olarak yazıldı** (yalancı rahatlama anının kendisi; rijidite
     S3'e bırakıldı) — klinik olarak pencere süresi makul mü?
+
+## A2 · Gün 2 eki (senin "ekleyelim" kararınla girdi — son söz senin)
+
+14. **Yeni tuzak aksiyonu: "Wait for the morning sonographer" = 300 dk.**
+    Gerekçe: 02:00 başlangıçtan sonograficinin gelişi ~07:00 (5 saat).
+    Gerçekçi bir açılış oyunundan (~60-75 dk) sonra basan oyuncu tam S2
+    yalancı-rahatlama penceresine (300-480) düşüyor — pitfall #6'nın
+    oynanabilir hali. İki kez basan gece tavanını (600) yer. Butondaki
+    "+300 min" etiketi bilinçli şok. Süre ve varlığı onaylıyor musun?
+15. **referTargetByMin=90 kapsamı (bilinçli tasarım, değişiklik yok):**
+    optimal yolda idrar/grafi OYNANMAZ (bütçeye sığmaz) — mimik-dışlama
+    dersleri debrief kontrastında anlatılır. Hedefi gevşetmek "tetkik
+    bekleme, taahhüt et" ana dersini sulandırırdı. Katılıyor musun?
 
 ## B · Bilgin olsun (karar gerektirmez)
 

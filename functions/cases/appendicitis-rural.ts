@@ -63,26 +63,52 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
     { key: "iv_antibiotics", label: "IV Antibiotics", status: "available", detail: "ward stock — ready to hang" },
     { key: "analgesia", label: "Analgesia", status: "available", detail: "IV analgesia on hand" },
     { key: "ct_abd", label: "CT Scan", status: "unavailable", detail: "no scanner here — nearest hours away" },
-    { key: "us_abd", label: "Ultrasound", status: "unavailable", detail: "no sonographer reachable tonight" },
+    { key: "us_abd", label: "Ultrasound", status: "unavailable", detail: "no sonographer tonight — earliest tomorrow morning" },
     { key: "surgeon_onsite", label: "On-site Surgeon", status: "unavailable", detail: "none tonight — patient must travel" },
     { key: "pediatric_icu", label: "Pediatric ICU", status: "unavailable", detail: "tertiary center only" },
     { key: "referral", label: "Referral / Ambulance", status: "delayed", detail: "ambulance from the city — ≈4 h" },
   ],
+  // keywords: free-text matchers (word-boundary PREFIX, case-insensitive) —
+  // chosen to avoid false positives ("us", "surgery" alone are too broad)
+  // and to never hint at the diagnosis. A few Turkish synonyms included.
   actionCatalog: [
-    { id: "history_exam", label: "Take history & perform focused physical exam", baseTimeCostMinutes: 15, requiresResource: null },
-    { id: "cbc", label: "Order CBC", baseTimeCostMinutes: 40, requiresResource: "cbc" },
-    { id: "urinalysis", label: "Order urinalysis (dipstick + microscopy)", baseTimeCostMinutes: 30, requiresResource: "urinalysis" },
-    { id: "glucose_ketone", label: "Check capillary glucose + urine ketones (bedside)", baseTimeCostMinutes: 5, requiresResource: "glucose_ketone" },
-    { id: "xray_abd", label: "Order abdominal X-ray (portable)", baseTimeCostMinutes: 25, requiresResource: "xray_abd" },
-    { id: "iv_fluids", label: "Start IV fluids", baseTimeCostMinutes: 15, requiresResource: "iv_fluids" },
-    { id: "iv_antibiotics", label: "Start IV antibiotics", baseTimeCostMinutes: 15, requiresResource: "iv_antibiotics" },
-    { id: "analgesia", label: "Give analgesia", baseTimeCostMinutes: 10, requiresResource: "analgesia" },
-    { id: "npo", label: "Make NPO (nothing by mouth)", baseTimeCostMinutes: 2, requiresResource: null },
-    { id: "reexamine_observe", label: "Re-examine / observe", baseTimeCostMinutes: 30, requiresResource: null },
-    { id: "order_ct", label: "Order abdominal CT", baseTimeCostMinutes: 15, requiresResource: "ct_abd" },
-    { id: "request_us", label: "Request abdominal ultrasound", baseTimeCostMinutes: 15, requiresResource: "us_abd" },
-    { id: "call_surgeon_onsite", label: "Call surgeon to come on site", baseTimeCostMinutes: 10, requiresResource: "surgeon_onsite" },
-    { id: "start_referral", label: "START REFERRAL CHAIN", baseTimeCostMinutes: 15, requiresResource: "referral" },
+    { id: "history_exam", label: "Take history & perform focused physical exam", baseTimeCostMinutes: 15, requiresResource: null,
+      keywords: ["examin", "physical exam", "palpat", "auscultat", "take a history", "take history", "muayene"] },
+    { id: "cbc", label: "Order CBC", baseTimeCostMinutes: 40, requiresResource: "cbc",
+      keywords: ["cbc", "blood count", "hemogram", "full blood", "white count", "wbc", "tam kan"] },
+    { id: "urinalysis", label: "Order urinalysis (dipstick + microscopy)", baseTimeCostMinutes: 30, requiresResource: "urinalysis",
+      keywords: ["urinalysis", "urine test", "urine sample", "urine dip", "dipstick", "urine micro", "idrar"] },
+    { id: "glucose_ketone", label: "Check capillary glucose + urine ketones (bedside)", baseTimeCostMinutes: 5, requiresResource: "glucose_ketone",
+      keywords: ["glucose", "ketone", "blood sugar", "fingerstick", "finger prick", "glukoz", "keton"] },
+    { id: "xray_abd", label: "Order abdominal X-ray (portable)", baseTimeCostMinutes: 25, requiresResource: "xray_abd",
+      keywords: ["x-ray", "xray", "x ray", "radiograph", "plain film", "abdominal film", "grafi"] },
+    { id: "iv_fluids", label: "Start IV fluids", baseTimeCostMinutes: 15, requiresResource: "iv_fluids",
+      keywords: ["fluid", "bolus", "saline", "ringer", "crystalloid", "drip", "hidrasyon"] },
+    { id: "iv_antibiotics", label: "Start IV antibiotics", baseTimeCostMinutes: 15, requiresResource: "iv_antibiotics",
+      keywords: ["antibiotic", "abx", "antibiyotik", "ceftriaxone", "cefotaxime", "metronidazole", "ampicillin", "gentamicin", "piperacillin", "amoxicillin", "seftriakson", "metronidazol"] },
+    { id: "analgesia", label: "Give analgesia", baseTimeCostMinutes: 10, requiresResource: "analgesia",
+      keywords: ["analgesi", "pain relief", "painkiller", "pain med", "paracetamol", "acetaminophen", "ibuprofen", "morphine", "ağrı kes"] },
+    { id: "npo", label: "Make NPO (nothing by mouth)", baseTimeCostMinutes: 2, requiresResource: null,
+      keywords: ["npo", "nil by mouth", "nothing by mouth", "nil per os", "oral alım"] },
+    { id: "reexamine_observe", label: "Re-examine / observe", baseTimeCostMinutes: 30, requiresResource: null,
+      keywords: ["observ", "re-examine", "reexamine", "recheck", "reassess", "serial exam", "gözle"] },
+    // The trap the case is built to teach (pitfall #6 verbatim): committing
+    // to imaging that only exists in the morning. 300 min = the sonographer
+    // arrives ~07:00 from a 02:00 start; taken after any realistic opening
+    // play it lands the player inside S2's false-relief window.
+    { id: "await_morning_us", label: "Wait for the morning sonographer", baseTimeCostMinutes: 300, requiresResource: null,
+      keywords: ["morning ultrasound", "morning sonograph", "morning scan", "until morning", "wait for morning", "sabah ultrason", "sabahı bekle"] },
+    { id: "order_ct", label: "Order abdominal CT", baseTimeCostMinutes: 15, requiresResource: "ct_abd",
+      keywords: ["ct", "tomography", "cat scan", "tomografi"] },
+    { id: "request_us", label: "Request abdominal ultrasound", baseTimeCostMinutes: 15, requiresResource: "us_abd",
+      keywords: ["ultrasound", "sonograph", "usg", "u/s", "ultrason"] },
+    { id: "call_surgeon_onsite", label: "Call surgeon to come on site", baseTimeCostMinutes: 10, requiresResource: "surgeon_onsite",
+      keywords: ["surgeon", "surgical consult", "cerrah"] },
+    // NOTE: these keywords only raise a pendingReferral CONFIRM in the UI —
+    // they never execute the case-ending action (loop.ts). Bare "112" was
+    // removed: it collided with S0's heart rate typed as free text.
+    { id: "start_referral", label: "START REFERRAL CHAIN", baseTimeCostMinutes: 15, requiresResource: "referral",
+      keywords: ["refer", "transfer", "ambulance", "call 112", "tertiary", "sevk", "evacuat"] },
   ],
   stages: [
     {

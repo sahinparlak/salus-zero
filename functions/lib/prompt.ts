@@ -7,6 +7,8 @@
 // scope lenses) on 2026-07-08.
 
 import type { CaseSpec, Stage } from "./caseSpec";
+import type { OrderedEntry } from "./loop";
+import { stageOf } from "./stage";
 
 export const SYSTEM_PROMPT_TEMPLATE = `You are the WORLD ENGINE of SALUS Zero, a clinical TRAINING simulator for doctors practicing decision-making in resource-limited settings. This is rehearsal for physician education, never real-patient care: you do not give real-world medical advice, and you never break character except for the single safety exception below.
 
@@ -77,23 +79,25 @@ export function formatVitals(spec: CaseSpec, stage: Stage): string {
 
 // Only tests the player actually ordered reach the model — the lab-gating
 // fence lives HERE in code; the prompt's only-if-ordered rule is merely
-// defense-in-depth.
+// defense-in-depth. Each result is SNAPSHOTTED at the stage that was current
+// when it resulted (entry.atMin): a CBC drawn at minute 20 keeps its minute-20
+// numbers forever, and only re-ordering yields serial values.
 function formatOrderedLabs(
   spec: CaseSpec,
-  stage: Stage,
-  orderedActionIds: string[],
+  orderedLog: OrderedEntry[],
 ): string {
-  const entries = Object.entries(stage.labs).filter(([actionId]) =>
-    orderedActionIds.includes(actionId),
-  );
-  if (entries.length === 0) return "(empty — no results are back)";
-  return entries
-    .map(([actionId, result]) => {
+  const lines = orderedLog
+    .map((entry) => {
+      const snapshot = stageOf(spec, entry.atMin);
+      const result = snapshot.labs[entry.id];
+      if (!result) return null;
       const label =
-        spec.actionCatalog.find((a) => a.id === actionId)?.label ?? actionId;
-      return `${label}: ${result}`;
+        spec.actionCatalog.find((a) => a.id === entry.id)?.label ?? entry.id;
+      return `${label} (sampled at minute ${Math.round(entry.atMin)}): ${result}`;
     })
-    .join(" | ");
+    .filter((line): line is string => line !== null);
+  if (lines.length === 0) return "(empty — no results are back)";
+  return lines.join(" | ");
 }
 
 function formatResources(spec: CaseSpec, ids: string[]): string {
@@ -126,11 +130,33 @@ export function referralStatus(
   return `referral chain started at minute ${Math.round(referralStartedAtMin)} — about ${remaining} minutes until the ambulance arrives at this hospital`;
 }
 
+// The player's turn as the model sees it: their words plus a code-generated
+// record of what actually went through the hospital system. The clock line is
+// authoritative — the model narrates the passage of time, never invents it.
+export function composeTurnMessage(
+  playerInput: string | undefined,
+  turnActions: { label: string }[],
+  turnCostMin: number,
+): string {
+  const parts: string[] = [];
+  if (playerInput) parts.push(playerInput);
+  const actionLine =
+    turnActions.length > 0
+      ? `Actions performed through the hospital system this turn: ${turnActions
+          .map((a) => a.label)
+          .join("; ")}.`
+      : "No orders went through the hospital system this turn.";
+  parts.push(
+    `[${actionLine} The case clock has advanced ${turnCostMin} minutes while this happened.]`,
+  );
+  return parts.join("\n\n");
+}
+
 export function buildSystemPrompt(
   spec: CaseSpec,
   stage: Stage,
   elapsedMin: number,
-  orderedActionIds: string[] = [],
+  orderedLog: OrderedEntry[] = [],
   referralStartedAtMin: number | null = null,
 ): string {
   const patient = `${spec.patient.name}, ${spec.patient.ageYears}-year-old ${spec.patient.sex === "male" ? "boy" : "girl"}, ${fmt(spec.patient.weightKg)} kg`;
@@ -145,7 +171,7 @@ export function buildSystemPrompt(
     ),
     "{{STAGE_VITALS}}": formatVitals(spec, stage),
     "{{STAGE_EXAM_FINDINGS}}": stage.examFindings,
-    "{{STAGE_LABS}}": formatOrderedLabs(spec, stage, orderedActionIds),
+    "{{STAGE_LABS}}": formatOrderedLabs(spec, orderedLog),
     "{{STAGE_NARRATIVE_CUE}}": stage.narrativeCue,
     "{{AVAILABLE_LIST}}": formatResources(spec, spec.resourceProfile.available),
     "{{UNAVAILABLE_LIST}}": formatResources(

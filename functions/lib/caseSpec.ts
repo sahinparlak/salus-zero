@@ -78,6 +78,10 @@ export const CaseSpecSchema = z.object({
       label: z.string(),
       baseTimeCostMinutes: z.number(), // the CODE advances the clock by this
       requiresResource: z.string().nullable(), // unavailable resource -> refuse
+      // Free-text matchers (word-boundary prefix, case-insensitive) so a
+      // typed "send a cbc" registers the order. Public data — must never
+      // hint at the diagnosis.
+      keywords: z.array(z.string()).default([]),
     }),
   ),
   stages: z.array(StageSchema).min(1),
