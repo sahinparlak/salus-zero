@@ -19,7 +19,7 @@ import {
   composeTurnMessage,
   OPENING_INSTRUCTION,
 } from "../lib/prompt";
-import { clampClock, maxClockOf, stageOf } from "../lib/stage";
+import { clampClock, maxClockOf, stageOf, vitalsAt } from "../lib/stage";
 
 interface Env {
   ANTHROPIC_API_KEY?: string;
@@ -51,22 +51,32 @@ const TurnRequestSchema = z.object({
 });
 
 // Everything the browser needs after a turn: authoritative clock, the vitals
-// the bedside monitor shows NOW, and what the turn registered. Current-stage
-// data only — future stages, ground truth and scoring never leave the worker.
+// the bedside monitor shows NOW, and what the turn registered. Current values
+// only — future stages, ground truth and scoring never leave the worker.
+// vitalsAt drifts within a stage (code-owned, deterministic), so the monitor
+// is alive on every turn — and the prompt uses the same function, so the
+// model narrates exactly what the screen shows.
 function stateHeader(spec: Parameters<typeof stageOf>[0], res: TurnResolution) {
-  const stage = stageOf(spec, res.elapsedMin);
-  return JSON.stringify({
+  const json = JSON.stringify({
     elapsedMin: res.elapsedMin,
     turnCostMin: res.turnCostMin,
     registeredActions: res.turnActions,
     attemptedActions: res.attemptedActions,
-    vitals: stage.vitals,
+    vitals: vitalsAt(spec, res.elapsedMin),
     orderedLog: res.orderedLog,
     referralStartedAtMin: res.referralStartedAtMin,
     pendingReferral: res.pendingReferral,
     caseOver: res.caseOver,
     endReason: res.endReason,
   });
+  // HTTP header values are latin-1: the refusal reasons carry em-dashes
+  // (and future cases may carry Turkish), which would reach the client as
+  // mojibake and split the history mirror from the worker's text. \uXXXX
+  // escapes survive any header transport and JSON.parse restores them.
+  return json.replace(
+    /[\u007f-\uffff]/g,
+    (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"),
+  );
 }
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
@@ -112,8 +122,13 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     // Sanitize the client-held log: cap the size (never a hard lock) and
     // clamp every sample time to the current clock — a forged future atMin
     // would otherwise pull future-stage lab strings into the prompt.
+    // Keep the OLDEST entries, matching debrief.ts: the earliest orders
+    // carry the differential credit and the referral decision minute, and
+    // the client replaces its log with this one every turn — a keep-newest
+    // window here would slowly evict them on a spam night and make the
+    // blind-commit check fire against a play that did examine.
     const safeLog = parsed.orderedLog
-      .slice(-200)
+      .slice(0, 200)
       .map((e) => ({ id: e.id, atMin: clampClock(e.atMin, clamped) }));
     resolution = resolveTurn(spec, {
       elapsedMin: clamped,
@@ -141,6 +156,9 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     // inviting a next move — the rule lives in the system prompt so the
     // in-world-noise defenses don't fight it.
     resolution.endReason,
+    // Voiced-but-uncommitted transfer: the status line tells the model to
+    // narrate deliberation only, never an initiated call.
+    resolution.pendingReferral,
   );
 
   // The opening instruction is re-prepended on every turn so the transcript

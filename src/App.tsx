@@ -9,6 +9,8 @@ interface RegisteredAction {
   id: string;
   label: string;
   costMin: number;
+  // Refused (attempted) actions carry the constraint board's authored reason.
+  reason?: string;
 }
 
 interface OrderedEntry {
@@ -57,6 +59,16 @@ interface SimState {
 interface TranscriptEntry {
   role: "world" | "player";
   text: string;
+  // What the player actually TYPED this turn (undefined for click-only
+  // turns). The replayed history is rebuilt from this field, so display
+  // text and replay text can never collide — typed input beginning with
+  // "→ " used to be mistaken for a click placeholder and silently dropped.
+  typed?: string;
+  // Sim minute the entry occurred at: for player entries the clock they saw
+  // when acting (the decision minute), for world entries the clock after the
+  // turn resolved. Code-stamped — the debrief uses it to anchor WHEN things
+  // were said, since the prose itself carries no reliable time.
+  atMin?: number;
   // For player entries: what the hospital system actually registered this
   // turn — echoed back so a mis-parsed free-text order is visible, not hidden.
   // `attempted` = requested but unavailable here (refused in-world).
@@ -80,6 +92,47 @@ function wallClock(elapsedMin: number): string {
 const CONNECTION_NOTE =
   "…(the connection dropped mid-scene; the night went on — carry on from the vitals.)";
 
+// A refresh must not erase the night: every settled state is persisted and
+// restored on load. Nothing secret lives client-side, so this is safe. The
+// envelope is versioned — bump SESSION_V when the shape changes and old
+// sessions are silently dropped instead of half-restored.
+const STORAGE_KEY = "salus-zero-session";
+const SESSION_V = 1;
+
+interface StoredSession {
+  v: number;
+  caseData: PublicCase;
+  transcript: TranscriptEntry[];
+  sim: SimState;
+  orderedLog: OrderedEntry[];
+  debrief: DebriefData | null;
+}
+
+function loadStoredSession(): StoredSession | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as StoredSession;
+    if (s.v !== SESSION_V || !s.caseData?.id || !s.sim || !Array.isArray(s.transcript))
+      return null;
+    // Structural guards: a truncated or foreign-written value must degrade
+    // to a fresh start, not a render crash on every load.
+    if (typeof s.sim.elapsedMin !== "number" || !Array.isArray(s.orderedLog))
+      return null;
+    if (s.debrief !== null && !Array.isArray(s.debrief?.axes)) return null;
+    // A finished night has nothing a refresh could destroy — restoring it
+    // would open the app on a spoiled reveal (or fire an unattended debrief
+    // call). Drop it so the landing screen is always the first impression.
+    if (s.sim.caseOver) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return s;
+  } catch {
+    return null;
+  }
+}
+
 // Mirror of the worker's composeTurnMessage, so the history we send back is
 // the same text the model originally saw. Kept as a copy on purpose: a value
 // import from functions/ would pull worker code into the client bundle.
@@ -88,7 +141,9 @@ function historyText(entry: TranscriptEntry): string {
   if (entry.role === "world") return entry.text.replace(CONNECTION_NOTE, "").trim();
   if (!entry.meta) return entry.text;
   const parts: string[] = [];
-  const typed = entry.text.startsWith("→ ") ? "" : entry.text;
+  // Prefer the recorded typed input; the startsWith fallback only serves
+  // entries created before `typed` existed.
+  const typed = entry.typed ?? (entry.text.startsWith("→ ") ? "" : entry.text);
   if (typed) parts.push(typed);
   const lines: string[] = [];
   lines.push(
@@ -100,8 +155,8 @@ function historyText(entry: TranscriptEntry): string {
   );
   if (entry.meta.attempted.length > 0) {
     lines.push(
-      `Requested but NOT available in this hospital (refuse in-world; the request only cost phone time, produce no result): ${entry.meta.attempted
-        .map((a) => a.label)
+      `Requested but NOT available in this hospital (refuse in-world, grounding the refusal in the stated reason; the request only cost phone time, produce no result): ${entry.meta.attempted
+        .map((a) => (a.reason ? `${a.label} (${a.reason})` : a.label))
         .join("; ")}.`,
     );
   }
@@ -126,8 +181,47 @@ export default function App() {
   const [debriefPhase, setDebriefPhase] = useState<
     "idle" | "loading" | "error" | "ready"
   >("idle");
+  // UI-owned visibility of the referral confirm strip. Raised by the worker
+  // (free-text mention -> pendingReferral) or by the START REFERRAL button —
+  // BOTH paths go through the same explicit confirm; nothing ends the case
+  // in one click. Recomputed from the state header on every turn.
+  const [showReferralConfirm, setShowReferralConfirm] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+
+  // Restore a persisted session once on load — a refresh (or a judge's
+  // accidental swipe) must not erase the night. Settled states only.
+  useEffect(() => {
+    const s = loadStoredSession();
+    if (!s) return;
+    setCaseData(s.caseData);
+    setTranscript(s.transcript);
+    setSim(s.sim);
+    setOrderedLog(s.orderedLog);
+    setDebrief(s.debrief);
+    setDebriefPhase(s.debrief ? "ready" : "idle");
+    setShowReferralConfirm(s.sim.pendingReferral && !s.sim.caseOver);
+    setPhase("ready");
+  }, []);
+
+  // Persist every settled state. Mid-stream states are deliberately not
+  // saved — a refresh during a stream falls back to the last settled turn.
+  useEffect(() => {
+    if (phase !== "ready" || !caseData || !sim) return;
+    try {
+      const s: StoredSession = {
+        v: SESSION_V,
+        caseData,
+        transcript,
+        sim,
+        orderedLog,
+        debrief,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+    } catch {
+      /* storage full or unavailable — the night just becomes volatile */
+    }
+  }, [phase, caseData, transcript, sim, orderedLog, debrief]);
 
   useEffect(() => {
     const el = transcriptRef.current;
@@ -157,6 +251,9 @@ export default function App() {
         endReason: state.endReason,
       });
       setOrderedLog(state.orderedLog);
+      // Every turn recomputes the confirm strip from the worker's verdict —
+      // a button-armed strip that wasn't confirmed clears with the turn.
+      setShowReferralConfirm((state.pendingReferral ?? false) && !state.caseOver);
       return state;
     } catch {
       return null;
@@ -187,6 +284,12 @@ export default function App() {
     setOrderedLog([]);
     setDebrief(null);
     setDebriefPhase("idle");
+    setShowReferralConfirm(false);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
     setPhase("loading");
     const controller = new AbortController();
     abortRef.current = controller;
@@ -223,7 +326,7 @@ export default function App() {
         return;
       }
       applyStateHeader(res);
-      setTranscript([{ role: "world", text: "" }]);
+      setTranscript([{ role: "world", text: "", atMin: 0 }]);
       await streamInto(res);
       setPhase("ready");
     } catch (err) {
@@ -245,13 +348,17 @@ export default function App() {
 
     // History = the transcript as the model saw it, BEFORE this turn. The
     // opening scene is always kept — it anchors the whole night — plus the
-    // most recent entries up to the cap.
-    const entries = transcript.filter((e) => e.text.trim().length > 0);
+    // most recent entries up to the cap. Filter on the REPLAYED text, not
+    // the raw display text: a world entry holding only the connection note
+    // strips to "" and would 400 the whole request (min-1 schema) forever.
+    const entries = transcript
+      .map((e) => ({ role: e.role, replay: historyText(e) }))
+      .filter((x) => x.replay.trim().length > 0);
     const kept =
       entries.length > 29 ? [entries[0], ...entries.slice(-28)] : entries;
-    const history = kept.map((e) => ({
-      role: e.role === "world" ? "assistant" : "user",
-      content: historyText(e).slice(0, 6000),
+    const history = kept.map((x) => ({
+      role: x.role === "world" ? "assistant" : "user",
+      content: x.replay.slice(0, 6000),
     }));
 
     const actionLabel = opts.actionId
@@ -263,7 +370,14 @@ export default function App() {
     setPhase("streaming");
     setTranscript((prev) => [
       ...prev,
-      { role: "player", text: text ?? `→ ${actionLabel ?? opts.actionId}` },
+      // The player entry is stamped with the clock they SAW when acting —
+      // the decision minute, the same semantic the score grades.
+      {
+        role: "player",
+        text: text ?? `→ ${actionLabel ?? opts.actionId}`,
+        typed: text,
+        atMin: sim.elapsedMin,
+      },
       { role: "world", text: "" },
     ]);
     const controller = new AbortController();
@@ -313,7 +427,11 @@ export default function App() {
                     turnCostMin: state.turnCostMin,
                   },
                 }
-              : e,
+              : i === prev.length - 1
+                ? // The world entry narrates the post-advance world — stamp
+                  // it with the clock after the turn resolved.
+                  { ...e, atMin: state.elapsedMin }
+                : e,
           ),
         );
       }
@@ -353,12 +471,23 @@ export default function App() {
     try {
       // The attending reads the WHOLE night, not the turn call's sliding
       // window — capped only against runaway payloads.
-      const entries = transcript.filter((e) => e.text.trim().length > 0);
+      // Filter on the replayed text (same reason as sendTurn: a note-only
+      // world entry strips to "" and min-1 would reject the request).
+      const entries = transcript
+        .map((e) => ({ role: e.role, atMin: e.atMin, replay: historyText(e) }))
+        .filter((x) => x.replay.trim().length > 0);
       const kept =
         entries.length > 120 ? [entries[0], ...entries.slice(-119)] : entries;
-      const history = kept.map((e) => ({
-        role: e.role === "world" ? "assistant" : "user",
-        content: historyText(e).slice(0, 6000),
+      // Unlike the turn call's history (which must replay VERBATIM what the
+      // world engine saw), the debrief transcript is a different consumer:
+      // each entry is prefixed with its app-stamped sim minute so the
+      // attending can anchor WHEN things were said.
+      const history = kept.map((x) => ({
+        role: x.role === "world" ? "assistant" : "user",
+        content: (
+          (x.atMin !== undefined ? `[minute ${Math.round(x.atMin)}] ` : "") +
+          x.replay
+        ).slice(0, 6000),
       }));
       const res = await fetch("/api/debrief", {
         method: "POST",
@@ -404,6 +533,7 @@ export default function App() {
       transcript: transcript.map((e) => ({
         role: e.role,
         text: e.text,
+        atMin: e.atMin ?? null,
         meta: e.meta ?? null,
       })),
       debrief,
@@ -550,7 +680,7 @@ export default function App() {
                                 <span className="text-red-400/80">
                                   {" · "}
                                   {entry.meta.attempted
-                                    .map((a) => `✗ ${a.label} — unavailable`)
+                                    .map((a) => `✗ ${a.label} — ${a.reason ?? "unavailable"}`)
                                     .join(" · ")}
                                 </span>
                               )}
@@ -620,20 +750,35 @@ export default function App() {
                   />
                 )}
 
-              {sim?.pendingReferral && !sim.caseOver && referralAction && (
+              {showReferralConfirm && sim && !sim.caseOver && referralAction && (
                 <div className="rounded-xl border border-amber-700 bg-amber-950/40 p-4 text-sm text-amber-200 flex flex-wrap items-center justify-between gap-3">
                   <span>
                     Commit to transfer? This starts the referral chain — the
                     ambulance comes from the city, and there is no calling it
                     back.
                   </span>
-                  <button
-                    onClick={() => sendTurn({ actionId: referralAction.id })}
-                    disabled={busy}
-                    className="rounded-lg bg-amber-400 px-4 py-1.5 text-xs font-semibold text-amber-950 transition hover:bg-amber-300 disabled:opacity-40"
-                  >
-                    {referralAction.label}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setShowReferralConfirm(false);
+                        // Persist the dismissal too — otherwise a refresh
+                        // restores pendingReferral and the strip pops back
+                        // open. The worker recomputes it fresh every turn.
+                        setSim((s) => (s ? { ...s, pendingReferral: false } : s));
+                      }}
+                      disabled={busy}
+                      className="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs text-neutral-400 transition hover:border-neutral-500 hover:text-neutral-200 disabled:opacity-40"
+                    >
+                      Not yet
+                    </button>
+                    <button
+                      onClick={() => sendTurn({ actionId: referralAction.id })}
+                      disabled={busy}
+                      className="rounded-lg bg-amber-400 px-4 py-1.5 text-xs font-semibold text-amber-950 transition hover:bg-amber-300 disabled:opacity-40"
+                    >
+                      {referralAction.label}
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -645,6 +790,10 @@ export default function App() {
                   disabled={busy}
                   onSend={() => sendTurn({ text: input })}
                   onAction={(id) => sendTurn({ actionId: id })}
+                  // The one irreversible action never fires from a single
+                  // click: the button only ARMS the same confirm strip a
+                  // free-text mention raises.
+                  onArmReferral={() => setShowReferralConfirm(true)}
                 />
               )}
             </section>
@@ -678,6 +827,7 @@ function DecisionBox({
   disabled,
   onSend,
   onAction,
+  onArmReferral,
 }: {
   caseData: PublicCase;
   input: string;
@@ -685,6 +835,7 @@ function DecisionBox({
   disabled: boolean;
   onSend: () => void;
   onAction: (id: string) => void;
+  onArmReferral: () => void;
 }) {
   const availableSet = new Set(caseData.resourceProfile.available);
   const referral = caseData.actionCatalog.find(
@@ -754,7 +905,7 @@ function DecisionBox({
           ))}
           {referral && (
             <button
-              onClick={() => onAction(referral.id)}
+              onClick={onArmReferral}
               disabled={disabled}
               className="rounded-lg border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-900/70 disabled:opacity-40"
             >
@@ -831,7 +982,9 @@ function MobileVitalsStrip({
           >
             <span className="text-neutral-500">{v.label.split(" ")[0]}</span>{" "}
             <span className={`font-medium ${tone}`}>
-              {value}
+              {/* toFixed keeps the decimal stable — "38.0", never a
+                  flickering "38" between "37.9" and "38.1" on camera */}
+              {value.toFixed(v.precision)}
               {v.unit ? ` ${v.unit}` : ""}
             </span>
           </span>
@@ -875,7 +1028,7 @@ function VitalsPanel({
               <span className="text-neutral-400">{v.label}</span>
               <span className="text-right">
                 <span className={`font-medium tabular-nums ${tone}`}>
-                  {value}
+                  {value.toFixed(v.precision)}
                   {v.unit ? ` ${v.unit}` : ""}
                 </span>
                 <span className="ml-2 text-[11px] text-neutral-600 tabular-nums">

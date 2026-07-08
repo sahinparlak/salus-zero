@@ -6,9 +6,9 @@
 // v1 template drafted + adversarially reviewed (safety/leak + clinical +
 // scope lenses) on 2026-07-08.
 
-import type { CaseSpec, Stage } from "./caseSpec";
+import type { CaseSpec, Stage, Vitals } from "./caseSpec";
 import type { EndReason, OrderedEntry } from "./loop";
-import { stageOf } from "./stage";
+import { stageOf, vitalsAt } from "./stage";
 
 export const SYSTEM_PROMPT_TEMPLATE = `You are the WORLD ENGINE of SALUS Zero, a clinical TRAINING simulator for doctors practicing decision-making in resource-limited settings. This is rehearsal for physician education, never real-patient care: you do not give real-world medical advice, and you never break character except for the single safety exception below.
 
@@ -99,12 +99,16 @@ function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
-export function formatVitals(spec: CaseSpec, stage: Stage): string {
+// Formats the code-owned vitals for the prompt. The caller passes the SAME
+// drifted values the monitor shows (vitalsAt) — the model and the screen can
+// never disagree about a number. toFixed(precision) keeps the decimal stable
+// ("38.0", never a flickering "38") to match the on-screen panels.
+export function formatVitals(spec: CaseSpec, vitals: Vitals): string {
   return spec.vitalsCatalog
     .map((v) => {
-      const value = stage.vitals[v.key];
+      const value = vitals[v.key];
       const unit = v.unit ? ` ${v.unit}` : "";
-      return `${v.label} ${fmt(value)}${unit}`;
+      return `${v.label} ${value.toFixed(v.precision)}${unit}`;
     })
     .join(" · ");
 }
@@ -144,16 +148,28 @@ function formatResources(spec: CaseSpec, ids: string[]): string {
     .join(", ");
 }
 
-// Code-owned referral status string. Day 1: the chain is never started yet;
-// the Day 2 loop will pass referralStartedAtMin when the action lands.
+// Code-owned referral status string. When the player merely SPOKE of
+// transfer this turn (pendingReferral — the UI is asking for the explicit
+// commit), the status line says so outright: without it the model treats the
+// doctor's words as an executed call and narrates beds being found while the
+// code-owned chain is still NOT started — a contradiction the next turn
+// would have to walk back (live-play finding, Day 4).
 export function referralStatus(
   spec: CaseSpec,
   elapsedMin: number,
   referralStartedAtMin: number | null,
+  pendingReferral = false,
 ): string {
   const eta = spec.resourceProfile.referralMinutes;
   if (referralStartedAtMin === null) {
-    return `referral chain NOT started — if activated, the ambulance dispatched from the city would reach this hospital about ${eta} minutes later`;
+    const base = `referral chain NOT started — if activated, the ambulance dispatched from the city would reach this hospital about ${eta} minutes later`;
+    if (pendingReferral) {
+      return (
+        base +
+        ". NOTE: the doctor has VOICED transfer intent this turn but has not committed it through the hospital system — treat it as thinking aloud at the bedside. No call is placed, no accepting center responds, nothing is dispatched; you may narrate deliberation or quiet preparation, never an initiated or accepted referral"
+      );
+    }
+    return base;
   }
   const remaining = Math.max(
     0,
@@ -172,7 +188,7 @@ export function referralStatus(
 export function composeTurnMessage(
   playerInput: string | undefined,
   turnActions: { label: string }[],
-  attemptedActions: { label: string }[],
+  attemptedActions: { label: string; reason?: string }[],
   turnCostMin: number,
 ): string {
   const parts: string[] = [];
@@ -186,9 +202,11 @@ export function composeTurnMessage(
       : "No orders went through the hospital system this turn.",
   );
   if (attemptedActions.length > 0) {
+    // Each refusal carries the constraint board's authored reason so the
+    // world refuses with the board's facts, never an improvised excuse.
     lines.push(
-      `Requested but NOT available in this hospital (refuse in-world; the request only cost phone time, produce no result): ${attemptedActions
-        .map((a) => a.label)
+      `Requested but NOT available in this hospital (refuse in-world, grounding the refusal in the stated reason; the request only cost phone time, produce no result): ${attemptedActions
+        .map((a) => (a.reason ? `${a.label} (${a.reason})` : a.label))
         .join("; ")}.`,
     );
   }
@@ -206,6 +224,7 @@ export function buildSystemPrompt(
   orderedLog: OrderedEntry[] = [],
   referralStartedAtMin: number | null = null,
   endReason: EndReason = null,
+  pendingReferral = false,
 ): string {
   const patient = `${spec.patient.name}, ${spec.patient.ageYears}-year-old ${spec.patient.sex === "male" ? "boy" : "girl"}, ${fmt(spec.patient.weightKg)} kg`;
   const replacements: Record<string, string> = {
@@ -216,8 +235,9 @@ export function buildSystemPrompt(
       spec,
       elapsedMin,
       referralStartedAtMin,
+      pendingReferral,
     ),
-    "{{STAGE_VITALS}}": formatVitals(spec, stage),
+    "{{STAGE_VITALS}}": formatVitals(spec, vitalsAt(spec, elapsedMin)),
     "{{STAGE_EXAM_FINDINGS}}": stage.examFindings,
     "{{STAGE_LABS}}": formatOrderedLabs(spec, orderedLog),
     "{{STAGE_NARRATIVE_CUE}}": stage.narrativeCue,

@@ -54,6 +54,15 @@ export const CaseSpecSchema = z.object({
       normalHigh: z.number(),
       criticalLow: z.number().nullable(),
       criticalHigh: z.number().nullable(),
+      // How the value moves BETWEEN stage anchors (vitalsAt in stage.ts):
+      // "linear" glides toward the next stage's anchor so the monitor is
+      // alive within a stage; "step" holds the anchor until the next stage
+      // triggers — for signs whose change IS a discrete event (e.g. the
+      // false-relief pain drop at perforation must land as a cliff, not a
+      // three-hour easing).
+      drift: z.enum(["linear", "step"]).default("linear"),
+      // Decimal places the code-owned value is rounded to (monitor + prompt).
+      precision: z.number().int().min(0).max(1).default(0),
     }),
   ),
   resourceProfile: z.object({
@@ -115,6 +124,18 @@ export const CaseSpecSchema = z.object({
         }),
       )
       .default([]),
+    // Dr. Şahin's madde-5 ruling (2026-07-08): committing the irreversible
+    // referral with NONE of the anyOf actions ever performed is a distinct
+    // safety failure — deducted from the discipline axis, once. The label is
+    // authored clinical text; score.ts appends the arithmetic.
+    blindCommitPenalty: z
+      .object({
+        anyOf: z.array(z.string()).min(1),
+        penalty: z.number(),
+        label: z.string(),
+      })
+      .nullable()
+      .default(null),
   }),
   debrief: z.object({
     goals: z.array(z.string()),
@@ -141,7 +162,11 @@ export function toPublicCase(spec: CaseSpec) {
     axis: spec.axis,
     vignette: spec.vignette,
     patient: spec.patient,
-    vitalsCatalog: spec.vitalsCatalog,
+    // `drift` stays worker-only: a client that can see which vital moves as
+    // a step vs a glide can read the case's discrete-event trap (the
+    // false-relief pain cliff) out of the network tab before it happens.
+    // `precision` is harmless display metadata and the panels need it.
+    vitalsCatalog: spec.vitalsCatalog.map(({ drift, ...pub }) => pub),
     initialVitals: spec.stages[0].vitals,
     resourceProfile: spec.resourceProfile,
     constraintBoard: spec.constraintBoard,

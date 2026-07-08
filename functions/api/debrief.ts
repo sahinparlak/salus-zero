@@ -52,6 +52,36 @@ const DebriefModelOutputSchema = z.object({
   resourceLesson: z.string().min(1),
 });
 
+// Decode-artifact gate for the money shot. Observed twice in live play (both
+// times in the final schema field): a stuttered word ("…cost.on on on the
+// pathway…"), a period-glued fragment ("suspicion.this is…"), a truncated
+// trailing token ("…not after it.eq"). One retry when a signature matches;
+// the second attempt is served regardless — the gate must never block.
+const ABBREVIATIONS = new Set(["a.m", "p.m", "e.g", "i.e", "etc", "vs", "dr", "st"]);
+
+// Exported for the (uncommitted) test battery only.
+export function looksGarbled(out: DebriefModelOutput): boolean {
+  const texts = [
+    out.groundTruthReveal,
+    out.resourceLesson,
+    ...out.strengths,
+    ...out.misses,
+  ];
+  for (const t of texts) {
+    // The same word three or more times in a row ("on on on").
+    if (/\b(\w+)( \1){2,}\b/i.test(t)) return true;
+    // Trailing junk after the final sentence terminal ("…after it.eq").
+    const tail = /[.!?]["']?([a-z]{1,4})$/.exec(t.trim());
+    if (tail && !ABBREVIATIONS.has(tail[1])) return true;
+    // A period glued to the next word ("suspicion.this") — skip short
+    // left-hand words so "a.m." and friends never trip it.
+    for (const m of t.matchAll(/([A-Za-z]{4,})\.([a-z]{3,})/g)) {
+      if (!ABBREVIATIONS.has(m[2])) return true;
+    }
+  }
+  return false;
+}
+
 function debriefResponse(
   spec: NonNullable<ReturnType<typeof getCase>>,
   result: ScoreResult,
@@ -119,54 +149,68 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   // Non-streaming, thinking adaptive, effort high: the debrief is allowed to
   // take its time — the UI covers the wait, and for the video it can be
   // prerecorded. Structured output guarantees parseable JSON on success.
-  const upstream = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: ctx.env.MODEL_ID || "claude-sonnet-5",
-      max_tokens: 12000,
-      thinking: { type: "adaptive" },
-      output_config: {
-        effort: "high",
-        format: { type: "json_schema", schema: DEBRIEF_OUTPUT_SCHEMA },
+  // Up to TWO attempts: a decode-artifact signature (looksGarbled) or a
+  // malformed body triggers one retry; whatever the second attempt yields is
+  // served, and a garbled-but-parsed first attempt is still better than a
+  // 502 if the retry itself fails.
+  let model: DebriefModelOutput | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const upstream = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
       },
-      system: DEBRIEF_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
-    }),
-  });
-
-  if (!upstream.ok) {
-    // Detail goes to the worker log only — raw upstream error bodies are not
-    // for the player-facing UI.
-    console.error(
-      `debrief upstream ${upstream.status}: ${await upstream.text().catch(() => "")}`,
-    );
-    return new Response("The attending could not be reached — try again", {
-      status: 502,
+      body: JSON.stringify({
+        model: ctx.env.MODEL_ID || "claude-sonnet-5",
+        max_tokens: 12000,
+        thinking: { type: "adaptive" },
+        output_config: {
+          effort: "high",
+          format: { type: "json_schema", schema: DEBRIEF_OUTPUT_SCHEMA },
+        },
+        system: DEBRIEF_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: userMessage }],
+      }),
     });
-  }
 
-  let model: DebriefModelOutput;
-  try {
-    const msg = (await upstream.json()) as {
-      stop_reason?: string;
-      content?: { type: string; text?: string }[];
-    };
-    if (msg.stop_reason === "refusal") {
-      return new Response("The debrief model declined the request", {
+    if (!upstream.ok) {
+      // Detail goes to the worker log only — raw upstream error bodies are
+      // not for the player-facing UI.
+      console.error(
+        `debrief upstream ${upstream.status}: ${await upstream.text().catch(() => "")}`,
+      );
+      if (model) break; // serve the garbled-but-whole first attempt
+      return new Response("The attending could not be reached — try again", {
         status: 502,
       });
     }
-    const text = msg.content?.find((b) => b.type === "text")?.text;
-    if (!text) throw new Error("no text block");
-    model = DebriefModelOutputSchema.parse(JSON.parse(text));
-  } catch {
-    // max_tokens truncation or malformed output — surface it; the client
-    // offers a retry rather than rendering a half-debrief.
+
+    try {
+      const msg = (await upstream.json()) as {
+        stop_reason?: string;
+        content?: { type: string; text?: string }[];
+      };
+      if (msg.stop_reason === "refusal") {
+        return new Response("The debrief model declined the request", {
+          status: 502,
+        });
+      }
+      const text = msg.content?.find((b) => b.type === "text")?.text;
+      if (!text) throw new Error("no text block");
+      const parsed = DebriefModelOutputSchema.parse(JSON.parse(text));
+      model = parsed;
+      if (!looksGarbled(parsed)) break;
+      console.error(`debrief attempt ${attempt + 1}: artifact signature detected`);
+    } catch {
+      // max_tokens truncation or malformed output — retry once, then surface
+      // it; the client offers a retry rather than rendering a half-debrief.
+      console.error(`debrief attempt ${attempt + 1}: malformed output`);
+    }
+  }
+
+  if (!model) {
     return new Response("The debrief came back malformed — try again", {
       status: 502,
     });

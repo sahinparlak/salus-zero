@@ -1,9 +1,9 @@
 // SALUS Zero — hero case: pediatric appendicitis, rural night profile.
 // WORKER-ONLY. Drafted + adversarially reviewed by a 7-agent workflow on
-// 2026-07-08; every clinical value is a DRAFT pending Dr. Şahin Parlak's
-// sign-off (see docs/GUN1-KLINIK-ONAY.md). The public id/title must never
-// hint at the diagnosis — only this file's name may, because it never
-// leaves the worker bundle.
+// 2026-07-08; clinical content APPROVED by Dr. Şahin Parlak (15/15 items,
+// docs/GUN1-KLINIK-ONAY.md; final pre-submit read reserved). The public
+// id/title must never hint at the diagnosis — only this file's name may,
+// because it never leaves the worker bundle.
 //
 // Threshold semantics (spec rule): all comparisons are INCLUSIVE — a vital
 // >= criticalHigh or <= criticalLow renders critical; a stage triggers when
@@ -28,13 +28,16 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
     "worse; he won't let anyone near his right side, he pushed my hand " +
     "away. In the car he cried at every bump. He never cries, doctor.",
   patient: { name: "Emir", ageYears: 7, sex: "male", weightKg: 23 },
+  // drift: vitals glide between stage anchors so the monitor is alive within
+  // a stage (vitalsAt in stage.ts). pain is the exception — the false-relief
+  // drop at perforation is a discrete event and must land as a cliff.
   vitalsCatalog: [
     { key: "HR", label: "Heart rate", unit: "bpm", normalLow: 70, normalHigh: 110, criticalLow: 60, criticalHigh: 140 },
     { key: "RR", label: "Respiratory rate", unit: "breaths/min", normalLow: 18, normalHigh: 25, criticalLow: 10, criticalHigh: 40 },
-    { key: "TempC", label: "Temperature", unit: "°C", normalLow: 36.5, normalHigh: 37.5, criticalLow: 35, criticalHigh: 39.5 },
+    { key: "TempC", label: "Temperature", unit: "°C", normalLow: 36.5, normalHigh: 37.5, criticalLow: 35, criticalHigh: 39.5, precision: 1 },
     { key: "SBP", label: "Systolic BP", unit: "mmHg", normalLow: 90, normalHigh: 115, criticalLow: 84, criticalHigh: null },
     { key: "SpO2", label: "SpO₂", unit: "%", normalLow: 95, normalHigh: 100, criticalLow: 90, criticalHigh: null },
-    { key: "pain", label: "Pain score", unit: "/10", normalLow: 0, normalHigh: 3, criticalLow: null, criticalHigh: 8 },
+    { key: "pain", label: "Pain score", unit: "/10", normalLow: 0, normalHigh: 3, criticalLow: null, criticalHigh: 8, drift: "step" },
   ],
   resourceProfile: {
     id: "rural_night_A",
@@ -328,8 +331,12 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
       "A single score is weaker than its trajectory — serial examination beats any one number, and a dip during observation is not reassurance.",
     ],
   },
-  // Scoring weights are a DRAFT pending Dr. Şahin's sign-off, like every
-  // clinical value in this file (see docs/GUN3-SKOR-ONAY.md).
+  // Scoring weights APPROVED by Dr. Şahin Parlak, 2026-07-08 (Day 4 rulings,
+  // docs/GUN3-SKOR-ONAY.md): differential credit moved from CBC to the
+  // history & exam (the real gastroenteritis discriminator; CBC keeps its
+  // narrative/PAS role and stays orderable) — which also makes 100 reachable
+  // (15+5+30+25 = 75 min of workup fits the 90-minute window). Blind commit:
+  // his madde-5 call — instant referral with zero assessment loses 10 more.
   scoringSignals: {
     referTargetByMin: 90,
     forbiddenResources: ["ct_abd", "us_abd"],
@@ -338,8 +345,21 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
       { actionId: "glucose_ketone", points: 6, label: "DKA excluded — capillary glucose and ketones checked" },
       { actionId: "urinalysis", points: 3, label: "UTI mimic worked up — urinalysis" },
       { actionId: "xray_abd", points: 3, label: "Constipation and basal pneumonia excluded — abdominal film" },
-      { actionId: "cbc", points: 3, label: "Inflammatory trajectory quantified — CBC" },
+      { actionId: "history_exam", points: 3, label: "Gastroenteritis mimic excluded — history taken and the abdomen examined with your hands" },
     ],
+    blindCommitPenalty: {
+      // reexamine_observe counts: a serial exam IS a bedside assessment —
+      // without it the score line "no physical examination at all" could
+      // contradict an order log showing "Re-examine / observe" (review
+      // finding, Day 4).
+      anyOf: ["history_exam", "reexamine_observe", "glucose_ketone"],
+      penalty: 10,
+      label:
+        "The referral was committed without any bedside assessment at all — " +
+        "no physical examination, not even a bedside glucose. Sending a " +
+        "child on a four-hour ambulance ride unexamined gambles the " +
+        "diagnosis twice",
+    },
   },
   debrief: {
     goals: [

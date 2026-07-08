@@ -1,11 +1,22 @@
 # Gün 3 — Skor Ağırlıkları Onay Listesi (Dr. Şahin Parlak)
 
-> **Statü: TASLAK — imzan bekleniyor.** Skor aritmetiği tamamen KODDA
-> (`functions/lib/score.ts` + `functions/cases/appendicitis-rural.ts`
-> `scoringSignals`); model sayı seçmiyor, sadece öğreten metni yazıyor.
-> Jüri "neden 73?" derse cevap satır satır ekranda ("How the score was
-> computed" paneli). Aşağıdaki ağırlıklar senin klinik kararını istiyor.
-> Nöbet arasında telefondan okunacak şekilde kısa; ✅/❌/düzelt yaz yeter.
+> **Statü: ✅ ONAYLANDI — Dr. Şahin Parlak, 8 Temmuz 2026 (Gün 4 açılışı).**
+> Kararlar: madde 1-4, 6, 9 **yazıldığı gibi onaylandı** (bantlar + t=KARAR
+> anı semantiği dahil; transfer-hazırlığı puanı P1'e park). Madde 5:
+> **ek kesinti eklendi** — sevk, `history_exam` / `reexamine_observe` /
+> `glucose_ketone`'un HİÇBİRİ yapılmadan commit edilirse disiplinden −10
+> (tek sefer; "kör sevk" artık 85 değil 75 alır; kısmi çalışma tetiklemez —
+> `scoringSignals.blindCommitPenalty`, motor domain-agnostik kaldı).
+> *Gün 4 inceleme düzeltmesi:* `reexamine_observe` listeye eklendi — seri
+> muayene de yatak başı değerlendirmedir; yoksa skor satırı ("hiç muayene
+> yok") kayıt günlüğüyle ("Re-examine / observe, dk 0") çelişebiliyordu.
+> Şahin'in vetosuna açık.
+> Madde 7+8 tek hamlede: **muayene ayırıcıya 3p girdi, CBC ayırıcıdan
+> çıktı** (sipariş edilebilir + PAS anlatısında yaşamaya devam ediyor);
+> yan etki olarak 100 artık ulaşılabilir (15+5+30+25 = 75 dk ≤ 90).
+> Skor aritmetiği tamamen KODDA; model sayı seçmiyor, sadece öğreten
+> metni yazıyor. Jüri "neden 73?" derse cevap satır satır ekranda.
+> Aşağıdaki orijinal taslak, tarihçe olarak korunuyor.
 
 ## Skorun iskeleti (toplam 100)
 

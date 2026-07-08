@@ -5,11 +5,14 @@
 // arithmetic the player can read line by line on screen.
 //
 // The three axes are the only ones the project grades — deliberately the
-// indefensibly-correct ones (ROADMAP §3.7). All weights are a DRAFT pending
-// Dr. Şahin's sign-off (docs/GUN3-SKOR-ONAY.md):
+// indefensibly-correct ones (ROADMAP §3.7). All weights APPROVED by
+// Dr. Şahin Parlak, 2026-07-08 (docs/GUN3-SKOR-ONAY.md):
 //
 //   1. Referral timing        60 pts  (the hinge of the whole case)
-//   2. Resource discipline    25 pts  (first ask free; repeats/waiting cost)
+//   2. Resource discipline    25 pts  (first ask free; repeats/waiting cost;
+//                                      committing referral with zero bedside
+//                                      assessment costs the case's authored
+//                                      blindCommitPenalty — his madde-5 call)
 //   3. Differential workup    15 pts  (mimic exclusion with tools on hand)
 //
 // Contested clinical judgment (antibiotic choice, fluid strategy, analgesia
@@ -147,7 +150,11 @@ function timingAxis(spec: CaseSpec, decisionMin: number | null): ScoreAxis {
   };
 }
 
-function disciplineAxis(spec: CaseSpec, orderedLog: OrderedEntry[]): ScoreAxis {
+function disciplineAxis(
+  spec: CaseSpec,
+  orderedLog: OrderedEntry[],
+  referralCommitted: boolean,
+): ScoreAxis {
   const catalog = new Map(spec.actionCatalog.map((a) => [a.id, a]));
   const forbidden = new Set(spec.scoringSignals.forbiddenResources);
   const waits = new Set(spec.scoringSignals.waitActions);
@@ -181,6 +188,24 @@ function disciplineAxis(spec: CaseSpec, orderedLog: OrderedEntry[]): ScoreAxis {
     lines.push(
       `"${label}" at minute ${Math.round(entry.atMin)} — waiting for absent imaging is the one unaffordable purchase. −${WAIT_PENALTY}.`,
     );
+  }
+
+  // Dr. Şahin's madde-5 ruling: committing the irreversible referral with
+  // NONE of the case's minimal-assessment actions ever performed is its own
+  // safety failure, once. Refused (unavailable) requests can never satisfy
+  // the check — only actions this hospital could actually perform count.
+  const blind = spec.scoringSignals.blindCommitPenalty;
+  if (blind && referralCommitted) {
+    const unavailable = new Set(spec.resourceProfile.unavailable);
+    const performable = (id: string) => {
+      const res = catalog.get(id)?.requiresResource;
+      return !res || !unavailable.has(res);
+    };
+    const done = new Set(orderedLog.map((e) => e.id).filter(performable));
+    if (!blind.anyOf.some((id) => done.has(id))) {
+      penalty += blind.penalty;
+      lines.push(`${blind.label}. −${blind.penalty}.`);
+    }
   }
 
   const earned = Math.max(DISCIPLINE_MAX - penalty, 0);
@@ -249,7 +274,7 @@ export function computeScore(spec: CaseSpec, input: ScoreInput): ScoreResult {
 
   const axes = [
     timingAxis(spec, decisionMin),
-    disciplineAxis(spec, input.orderedLog),
+    disciplineAxis(spec, input.orderedLog, input.referralStartedAtMin !== null),
     differentialAxis(spec, input.orderedLog),
   ];
   const score = axes.reduce((sum, a) => sum + a.earned, 0);

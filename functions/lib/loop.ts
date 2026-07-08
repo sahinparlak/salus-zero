@@ -30,8 +30,11 @@ export interface TurnResolution {
   // Requests whose resource this hospital does not have: they cost the phone
   // time and are logged (the debrief counts them), but nothing is performed —
   // the world refuses them in-world. Kept separate so the model is never told
-  // an impossible thing "was performed".
-  attemptedActions: { id: string; label: string; costMin: number }[];
+  // an impossible thing "was performed". `reason` is the constraint board's
+  // authored detail — piped into the turn message so the world refuses with
+  // the board's facts instead of improvising its own ("scanner has been
+  // down" vs the board's "no scanner here").
+  attemptedActions: { id: string; label: string; costMin: number; reason: string }[];
   turnCostMin: number;
   elapsedMin: number;
   orderedLog: OrderedEntry[];
@@ -170,7 +173,10 @@ export function resolveTurn(spec: CaseSpec, input: TurnInput): TurnResolution {
     const a = catalog.get(id)!;
     const entry = { id: a.id, label: a.label, costMin: a.baseTimeCostMinutes };
     if (a.requiresResource && unavailable.has(a.requiresResource)) {
-      attemptedActions.push(entry);
+      const reason =
+        spec.constraintBoard.find((c) => c.key === a.requiresResource)
+          ?.detail ?? "not available here tonight";
+      attemptedActions.push({ ...entry, reason });
     } else {
       turnActions.push(entry);
     }

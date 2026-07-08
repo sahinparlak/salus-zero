@@ -1,7 +1,7 @@
 // The physics of the simulation. Pure functions, code-owned: the clock, the
 // stage, the vitals all come from here — the model never invents them.
 
-import type { CaseSpec, Stage } from "./caseSpec";
+import type { CaseSpec, Stage, Vitals } from "./caseSpec";
 
 // Clamp the sim clock into [0, maxMin]. Guards against negative or absurd
 // client-supplied elapsed values before they reach the stage machine.
@@ -24,6 +24,46 @@ export function stageOf(spec: CaseSpec, accumulatedDelayMin: number): Stage {
     }
   }
   return current;
+}
+
+// The vitals the monitor shows at any minute — still 100% deterministic and
+// code-owned, but alive WITHIN a stage: each vital glides linearly from its
+// current stage anchor to the next stage's anchor, arriving exactly when that
+// stage triggers (so the numbers are continuous across the boundary). Vitals
+// authored with drift:"step" (e.g. pain, whose false-relief drop is a
+// discrete perforation event) hold their anchor until the boundary instead.
+// Inside the final stage every value holds. Exam findings, labs and PAS stay
+// stage-stepped — only the monitor breathes.
+export function vitalsAt(spec: CaseSpec, elapsedMin: number): Vitals {
+  const ordered = [...spec.stages].sort(
+    (a, b) => a.triggerAtAccumulatedDelayMin - b.triggerAtAccumulatedDelayMin,
+  );
+  const t = Math.max(elapsedMin, ordered[0].triggerAtAccumulatedDelayMin);
+  let idx = 0;
+  for (let i = 0; i < ordered.length; i++) {
+    if (t >= ordered[i].triggerAtAccumulatedDelayMin) idx = i;
+  }
+  const current = ordered[idx];
+  const next = ordered[idx + 1];
+  const span = next
+    ? next.triggerAtAccumulatedDelayMin - current.triggerAtAccumulatedDelayMin
+    : 0;
+  const frac =
+    next && span > 0
+      ? Math.min((t - current.triggerAtAccumulatedDelayMin) / span, 1)
+      : 0;
+
+  const out = { ...current.vitals };
+  for (const v of spec.vitalsCatalog) {
+    const from = current.vitals[v.key];
+    const value =
+      next && v.drift === "linear"
+        ? from + (next.vitals[v.key] - from) * frac
+        : from;
+    const factor = 10 ** v.precision;
+    out[v.key] = Math.round(value * factor) / factor;
+  }
+  return out;
 }
 
 // The sim ends (worst path) once the final stage has been held for a while;
