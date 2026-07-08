@@ -34,7 +34,12 @@ interface TranscriptEntry {
   text: string;
   // For player entries: what the hospital system actually registered this
   // turn — echoed back so a mis-parsed free-text order is visible, not hidden.
-  meta?: { registered: RegisteredAction[]; turnCostMin: number };
+  // `attempted` = requested but unavailable here (refused in-world).
+  meta?: {
+    registered: RegisteredAction[];
+    attempted: RegisteredAction[];
+    turnCostMin: number;
+  };
 }
 
 // The case starts at 02:00; the wall clock is pure display sugar.
@@ -48,20 +53,31 @@ function wallClock(elapsedMin: number): string {
 // Mirror of the worker's composeTurnMessage, so the history we send back is
 // the same text the model originally saw. Kept as a copy on purpose: a value
 // import from functions/ would pull worker code into the client bundle.
+// Change together with functions/lib/prompt.ts composeTurnMessage.
 function historyText(entry: TranscriptEntry): string {
   if (entry.role === "world" || !entry.meta) return entry.text;
   const parts: string[] = [];
   const typed = entry.text.startsWith("→ ") ? "" : entry.text;
   if (typed) parts.push(typed);
-  const actionLine =
+  const lines: string[] = [];
+  lines.push(
     entry.meta.registered.length > 0
       ? `Actions performed through the hospital system this turn: ${entry.meta.registered
           .map((a) => a.label)
           .join("; ")}.`
-      : "No orders went through the hospital system this turn.";
-  parts.push(
-    `[${actionLine} The case clock has advanced ${entry.meta.turnCostMin} minutes while this happened.]`,
+      : "No orders went through the hospital system this turn.",
   );
+  if (entry.meta.attempted.length > 0) {
+    lines.push(
+      `Requested but NOT available in this hospital (refuse in-world; the request only cost phone time, produce no result): ${entry.meta.attempted
+        .map((a) => a.label)
+        .join("; ")}.`,
+    );
+  }
+  lines.push(
+    `The case clock has advanced ${entry.meta.turnCostMin} minutes while this happened.`,
+  );
+  parts.push(`[${lines.join(" ")}]`);
   return parts.join("\n\n");
 }
 
@@ -94,6 +110,7 @@ export default function App() {
       const state = JSON.parse(raw) as SimState & {
         turnCostMin: number;
         registeredActions: RegisteredAction[];
+        attemptedActions: RegisteredAction[];
         orderedLog: OrderedEntry[];
       };
       setSim({
@@ -252,6 +269,7 @@ export default function App() {
                   ...e,
                   meta: {
                     registered: state.registeredActions,
+                    attempted: state.attemptedActions ?? [],
                     turnCostMin: state.turnCostMin,
                   },
                 }
@@ -404,15 +422,25 @@ export default function App() {
                             {entry.text}
                           </div>
                           {entry.meta && (
-                            <div className="mt-1.5 text-[11px] text-amber-300/70 tabular-nums">
-                              ⏱ +{entry.meta.turnCostMin} min
-                              {entry.meta.registered.length > 0 && (
-                                <>
+                            <div className="mt-1.5 text-[11px] tabular-nums">
+                              <span className="text-amber-300/70">
+                                ⏱ +{entry.meta.turnCostMin} min
+                                {entry.meta.registered.length > 0 && (
+                                  <>
+                                    {" · "}
+                                    {entry.meta.registered
+                                      .map((a) => a.label)
+                                      .join(" · ")}
+                                  </>
+                                )}
+                              </span>
+                              {entry.meta.attempted.length > 0 && (
+                                <span className="text-red-400/80">
                                   {" · "}
-                                  {entry.meta.registered
-                                    .map((a) => a.label)
+                                  {entry.meta.attempted
+                                    .map((a) => `✗ ${a.label} — unavailable`)
                                     .join(" · ")}
-                                </>
+                                </span>
                               )}
                             </div>
                           )}

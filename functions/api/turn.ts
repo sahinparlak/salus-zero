@@ -59,6 +59,7 @@ function stateHeader(spec: Parameters<typeof stageOf>[0], res: TurnResolution) {
     elapsedMin: res.elapsedMin,
     turnCostMin: res.turnCostMin,
     registeredActions: res.turnActions,
+    attemptedActions: res.attemptedActions,
     vitals: stage.vitals,
     orderedLog: res.orderedLog,
     referralStartedAtMin: res.referralStartedAtMin,
@@ -86,6 +87,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     // Opening the case costs nothing: the arrival scene IS minute zero.
     resolution = {
       turnActions: [],
+      attemptedActions: [],
       turnCostMin: 0,
       elapsedMin: 0,
       orderedLog: [],
@@ -123,6 +125,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     userMessage = composeTurnMessage(
       parsed.playerInput,
       resolution.turnActions,
+      resolution.attemptedActions,
       resolution.turnCostMin,
     );
   }
@@ -138,12 +141,17 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
   // The opening instruction is re-prepended on every turn so the transcript
   // the model sees starts the same way it was generated, and the array stays
-  // strictly user/assistant-alternating regardless of client input.
-  const messages = mergeAlternating([
-    { role: "user" as const, content: OPENING_INSTRUCTION },
-    ...parsed.history,
-    { role: "user" as const, content: userMessage },
-  ]);
+  // strictly user/assistant-alternating regardless of client input. On the
+  // opening turn itself the instruction IS the message — no prepend, or the
+  // model would receive it twice and later replays would diverge from turn 1.
+  const messages =
+    parsed.intent === "present"
+      ? [{ role: "user" as const, content: OPENING_INSTRUCTION }]
+      : mergeAlternating([
+          { role: "user" as const, content: OPENING_INSTRUCTION },
+          ...parsed.history,
+          { role: "user" as const, content: userMessage },
+        ]);
 
   const headers = {
     "content-type": "text/plain; charset=utf-8",
@@ -259,16 +267,24 @@ function streamMock(
   headers: Record<string, string>,
 ): Response {
   const encoder = new TextEncoder();
+  const refused = resolution.attemptedActions
+    .map((a) => a.label.toLowerCase())
+    .join(", ");
   const text =
     intent === "present"
       ? "The ward is quiet except for a fan turning somewhere down the " +
         "corridor. A nurse waves you over: a mother stands by the stretcher, " +
         "a boy curled on his side under a blanket. (Local mock — add your " +
         "API key to .dev.vars to stream the real world engine.)"
-      : `The night moves on. Your orders are carried out; the clock reads ` +
-        `minute ${Math.round(resolution.elapsedMin)} and the child shifts on ` +
-        `the stretcher. (Local mock — the real world engine would narrate ` +
-        `this turn.)`;
+      : refused
+        ? `The nurse shakes her head — ${refused}: not here, not tonight. ` +
+          `The request costs you phone time; the clock reads minute ` +
+          `${Math.round(resolution.elapsedMin)}. (Local mock — the real ` +
+          `world engine would narrate this refusal.)`
+        : `The night moves on. Your orders are carried out; the clock reads ` +
+          `minute ${Math.round(resolution.elapsedMin)} and the child shifts on ` +
+          `the stretcher. (Local mock — the real world engine would narrate ` +
+          `this turn.)`;
   const words = text.split(" ");
   const stream = new ReadableStream({
     async start(controller) {

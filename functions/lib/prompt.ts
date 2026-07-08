@@ -133,22 +133,37 @@ export function referralStatus(
 // The player's turn as the model sees it: their words plus a code-generated
 // record of what actually went through the hospital system. The clock line is
 // authoritative — the model narrates the passage of time, never invents it.
+// Requests for resources this hospital lacks travel in a separate REFUSED
+// channel so the model is never told an impossible thing "was performed".
+// NOTE: src/App.tsx historyText() mirrors this text verbatim for the replayed
+// transcript — change both together.
 export function composeTurnMessage(
   playerInput: string | undefined,
   turnActions: { label: string }[],
+  attemptedActions: { label: string }[],
   turnCostMin: number,
 ): string {
   const parts: string[] = [];
   if (playerInput) parts.push(playerInput);
-  const actionLine =
+  const lines: string[] = [];
+  lines.push(
     turnActions.length > 0
       ? `Actions performed through the hospital system this turn: ${turnActions
           .map((a) => a.label)
           .join("; ")}.`
-      : "No orders went through the hospital system this turn.";
-  parts.push(
-    `[${actionLine} The case clock has advanced ${turnCostMin} minutes while this happened.]`,
+      : "No orders went through the hospital system this turn.",
   );
+  if (attemptedActions.length > 0) {
+    lines.push(
+      `Requested but NOT available in this hospital (refuse in-world; the request only cost phone time, produce no result): ${attemptedActions
+        .map((a) => a.label)
+        .join("; ")}.`,
+    );
+  }
+  lines.push(
+    `The case clock has advanced ${turnCostMin} minutes while this happened.`,
+  );
+  parts.push(`[${lines.join(" ")}]`);
   return parts.join("\n\n");
 }
 

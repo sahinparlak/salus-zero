@@ -27,6 +27,11 @@ export type EndReason = "referral" | "clockMax" | null;
 export interface TurnResolution {
   // Actions recognized this turn (clicked + matched in free text), deduped.
   turnActions: { id: string; label: string; costMin: number }[];
+  // Requests whose resource this hospital does not have: they cost the phone
+  // time and are logged (the debrief counts them), but nothing is performed —
+  // the world refuses them in-world. Kept separate so the model is never told
+  // an impossible thing "was performed".
+  attemptedActions: { id: string; label: string; costMin: number }[];
   turnCostMin: number;
   elapsedMin: number;
   orderedLog: OrderedEntry[];
@@ -41,12 +46,37 @@ export interface TurnResolution {
 // A pure conversation/exam-by-words turn still burns a little time.
 export const TALK_ONLY_COST_MIN = 5;
 
-// "there is no CT here", "don't order a CT" must not register the action.
-// A negation word within the same clause, up to ~40 chars before the match.
-// Dashes count as clause breaks so "no choice — transfer him now" still
-// registers; curly apostrophes are normalized before this ever runs.
-const NEGATION_BEFORE =
-  /\b(no|not|don'?t|do not|can'?t|cannot|won'?t|without|isn'?t|never|unavailable)\b[^.,;!?—–-]{0,40}$/i;
+// "there is no CT here", "don't order a CT" must not register the action —
+// but the negation only binds to the keyword through small CONNECTOR words
+// ("don't ORDER A ct"). Any other word in between ("dont DELAY refer now")
+// means the negation belonged to a different verb, so the action still
+// registers. Punctuation and dashes always break the bond ("no choice —
+// transfer him now" registers). Curly apostrophes are normalized upstream.
+const NEGATION_WORD =
+  /\b(no|not|don'?t|do not|can'?t|cannot|won'?t|without|isn'?t|never|unavailable)\b/gi;
+
+const NEGATION_CONNECTORS = new Set([
+  // verbs of ordering/doing that a negation naturally flows through
+  "order", "get", "request", "send", "do", "run", "check", "wait", "give",
+  "start", "hold", "off", "use", "take", "perform", "need", "want", "ask",
+  "call", "go", "going", "mind",
+  // articles, pronouns, fillers
+  "for", "the", "a", "an", "any", "another", "more", "to", "of", "him",
+  "her", "it", "that", "this", "some", "be", "able", "even", "yet",
+  "again", "just", "please", "really",
+]);
+
+function isNegated(prefix: string): boolean {
+  // A negation never crosses punctuation — only the last clause matters.
+  const clause = prefix.split(/[.,;!?—–-]/).pop() ?? "";
+  NEGATION_WORD.lastIndex = 0;
+  let last: RegExpExecArray | null = null;
+  for (let m; (m = NEGATION_WORD.exec(clause)); ) last = m;
+  if (!last) return false;
+  const between = clause.slice(last.index + last[0].length);
+  const words = between.match(/[\p{L}']+/gu) ?? [];
+  return words.every((w) => NEGATION_CONNECTORS.has(w.toLowerCase()));
+}
 
 function keywordRegex(keyword: string): RegExp {
   const escaped = keyword
@@ -68,7 +98,7 @@ export function matchActionsInText(spec: CaseSpec, text: string): string[] {
     for (const keyword of action.keywords) {
       const match = keywordRegex(keyword).exec(normalized);
       if (!match) continue;
-      if (NEGATION_BEFORE.test(normalized.slice(0, match.index))) continue;
+      if (isNegated(normalized.slice(0, match.index))) continue;
       matches.push({ id: action.id, keyword: keyword.toLowerCase() });
       break;
     }
@@ -130,23 +160,37 @@ export function resolveTurn(spec: CaseSpec, input: TurnInput): TurnResolution {
     ids.delete(referralActionId);
   }
 
-  const turnActions = [...ids].map((id) => {
+  // Partition: performed (resource on hand or none needed) vs attempted
+  // (resource this hospital lacks). Attempted requests still burn the phone
+  // minutes — that friction is the design — but are never "performed".
+  const unavailable = new Set(spec.resourceProfile.unavailable);
+  const turnActions: TurnResolution["turnActions"] = [];
+  const attemptedActions: TurnResolution["attemptedActions"] = [];
+  for (const id of ids) {
     const a = catalog.get(id)!;
-    return { id: a.id, label: a.label, costMin: a.baseTimeCostMinutes };
-  });
-  const turnCostMin = turnActions.length
-    ? turnActions.reduce((sum, a) => sum + a.costMin, 0)
+    const entry = { id: a.id, label: a.label, costMin: a.baseTimeCostMinutes };
+    if (a.requiresResource && unavailable.has(a.requiresResource)) {
+      attemptedActions.push(entry);
+    } else {
+      turnActions.push(entry);
+    }
+  }
+  const allActions = [...turnActions, ...attemptedActions];
+  const turnCostMin = allActions.length
+    ? allActions.reduce((sum, a) => sum + a.costMin, 0)
     : TALK_ONLY_COST_MIN;
 
   const elapsedMin = clampClock(input.elapsedMin + turnCostMin, maxClock);
   // Orders are stamped with the DRAW minute (the clock when the turn began):
   // a sample reflects the patient it was taken from, even if the turnaround
   // crosses a stage boundary. Results become visible at end of turn either
-  // way (the log is only appended once the turn resolves).
+  // way (the log is only appended once the turn resolves). Attempted
+  // (refused) requests are logged too — they yield no lab string, but the
+  // debrief's forbidden-resource counter reads them from this log.
   const drawnAtMin = clampClock(input.elapsedMin, maxClock);
   const orderedLog = [
     ...input.orderedLog,
-    ...turnActions.map((a) => ({ id: a.id, atMin: drawnAtMin })),
+    ...allActions.map((a) => ({ id: a.id, atMin: drawnAtMin })),
   ];
 
   let referralStartedAtMin = input.referralStartedAtMin;
@@ -169,6 +213,7 @@ export function resolveTurn(spec: CaseSpec, input: TurnInput): TurnResolution {
 
   return {
     turnActions,
+    attemptedActions,
     turnCostMin,
     elapsedMin,
     orderedLog,
