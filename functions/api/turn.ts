@@ -137,6 +137,10 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     resolution.elapsedMin,
     resolution.orderedLog,
     resolution.referralStartedAtMin,
+    // On the case-ending turn the world must CLOSE the scene instead of
+    // inviting a next move — the rule lives in the system prompt so the
+    // in-world-noise defenses don't fight it.
+    resolution.endReason,
   );
 
   // The opening instruction is re-prepended on every turn so the transcript
@@ -185,8 +189,12 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   });
 
   if (!upstream.ok || !upstream.body) {
-    const detail = await upstream.text().catch(() => "");
-    return new Response(`Upstream error ${upstream.status}: ${detail}`, {
+    // Detail goes to the worker log only — raw upstream error bodies are not
+    // for the player-facing UI (App.tsx renders this text verbatim).
+    console.error(
+      `turn upstream ${upstream.status}: ${await upstream.text().catch(() => "")}`,
+    );
+    return new Response("the world engine is unreachable — try the turn again", {
       status: 502,
       headers: { "content-type": "text/plain; charset=utf-8" },
     });
@@ -276,15 +284,24 @@ function streamMock(
         "corridor. A nurse waves you over: a mother stands by the stretcher, " +
         "a boy curled on his side under a blanket. (Local mock — add your " +
         "API key to .dev.vars to stream the real world engine.)"
-      : refused
-        ? `The nurse shakes her head — ${refused}: not here, not tonight. ` +
-          `The request costs you phone time; the clock reads minute ` +
-          `${Math.round(resolution.elapsedMin)}. (Local mock — the real ` +
-          `world engine would narrate this refusal.)`
-        : `The night moves on. Your orders are carried out; the clock reads ` +
-          `minute ${Math.round(resolution.elapsedMin)} and the child shifts on ` +
-          `the stretcher. (Local mock — the real world engine would narrate ` +
-          `this turn.)`;
+      : resolution.endReason === "referral"
+        ? `The transfer is committed; the chain is in motion and there is ` +
+          `nothing left to decide — only the long wait for headlights. The ` +
+          `night settles at minute ${Math.round(resolution.elapsedMin)}. ` +
+          `(Local mock — the real world engine would close this scene.)`
+        : resolution.endReason === "clockMax"
+          ? `The clock has run out at minute ${Math.round(resolution.elapsedMin)}; ` +
+            `the night is over and no further move belongs to the doctor. ` +
+            `(Local mock — the real world engine would close this scene.)`
+          : refused
+            ? `The nurse shakes her head — ${refused}: not here, not tonight. ` +
+              `The request costs you phone time; the clock reads minute ` +
+              `${Math.round(resolution.elapsedMin)}. (Local mock — the real ` +
+              `world engine would narrate this refusal.)`
+            : `The night moves on. Your orders are carried out; the clock reads ` +
+              `minute ${Math.round(resolution.elapsedMin)} and the child shifts on ` +
+              `the stretcher. (Local mock — the real world engine would narrate ` +
+              `this turn.)`;
   const words = text.split(" ");
   const stream = new ReadableStream({
     async start(controller) {

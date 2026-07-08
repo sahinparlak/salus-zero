@@ -16,6 +16,31 @@ interface OrderedEntry {
   atMin: number;
 }
 
+interface DebriefAxis {
+  key: string;
+  label: string;
+  earned: number;
+  max: number;
+  lines: string[];
+}
+
+// The merged payload from POST /api/debrief: the code-computed score with its
+// line-by-line arithmetic, the model's teaching prose, and the authored
+// CT-contrast paragraph (which only ever reaches the client inside this).
+interface DebriefData {
+  score: number;
+  axes: DebriefAxis[];
+  endReason: "referral" | "clockMax";
+  referralStartedAtMin: number | null;
+  referTargetByMin: number;
+  finalStageId: string;
+  groundTruthReveal: string;
+  strengths: string[];
+  misses: string[];
+  resourceLesson: string;
+  ctContrast: string;
+}
+
 // Authoritative sim state, parsed from the X-Salus-State response header the
 // worker sends with every turn. The client never computes any of this.
 interface SimState {
@@ -50,12 +75,18 @@ function wallClock(elapsedMin: number): string {
   return `${hh}:${mm}`;
 }
 
+// Display-only note appended to a world entry when its stream is cut. It must
+// never travel back to the model as "its own" narration — historyText strips it.
+const CONNECTION_NOTE =
+  "…(the connection dropped mid-scene; the night went on — carry on from the vitals.)";
+
 // Mirror of the worker's composeTurnMessage, so the history we send back is
 // the same text the model originally saw. Kept as a copy on purpose: a value
 // import from functions/ would pull worker code into the client bundle.
 // Change together with functions/lib/prompt.ts composeTurnMessage.
 function historyText(entry: TranscriptEntry): string {
-  if (entry.role === "world" || !entry.meta) return entry.text;
+  if (entry.role === "world") return entry.text.replace(CONNECTION_NOTE, "").trim();
+  if (!entry.meta) return entry.text;
   const parts: string[] = [];
   const typed = entry.text.startsWith("→ ") ? "" : entry.text;
   if (typed) parts.push(typed);
@@ -91,6 +122,10 @@ export default function App() {
     "idle",
   );
   const [error, setError] = useState<string | null>(null);
+  const [debrief, setDebrief] = useState<DebriefData | null>(null);
+  const [debriefPhase, setDebriefPhase] = useState<
+    "idle" | "loading" | "error" | "ready"
+  >("idle");
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
 
@@ -150,6 +185,8 @@ export default function App() {
     setTranscript([]);
     setSim(null);
     setOrderedLog([]);
+    setDebrief(null);
+    setDebriefPhase("idle");
     setPhase("loading");
     const controller = new AbortController();
     abortRef.current = controller;
@@ -159,6 +196,9 @@ export default function App() {
       const caseRes = await fetch("/api/case", { signal: controller.signal });
       if (!caseRes.ok) {
         setError(`Could not load the case (${caseRes.status}).`);
+        // Clear any previous session's case too, so "Begin the night shift"
+        // is always there as the retry — no dead end after a failed restart.
+        setCaseData(null);
         setPhase("idle");
         return;
       }
@@ -295,9 +335,7 @@ export default function App() {
             const last = next[next.length - 1];
             next[next.length - 1] = {
               ...last,
-              text:
-                (last.text ? last.text + " " : "") +
-                "…(the connection dropped mid-scene; the night went on — carry on from the vitals.)",
+              text: (last.text ? last.text + " " : "") + CONNECTION_NOTE,
             };
             return next;
           });
@@ -307,6 +345,80 @@ export default function App() {
     } finally {
       abortRef.current = null;
     }
+  }
+
+  async function fetchDebrief() {
+    if (!caseData || !sim || !sim.caseOver || debriefPhase === "loading") return;
+    setDebriefPhase("loading");
+    try {
+      // The attending reads the WHOLE night, not the turn call's sliding
+      // window — capped only against runaway payloads.
+      const entries = transcript.filter((e) => e.text.trim().length > 0);
+      const kept =
+        entries.length > 120 ? [entries[0], ...entries.slice(-119)] : entries;
+      const history = kept.map((e) => ({
+        role: e.role === "world" ? "assistant" : "user",
+        content: historyText(e).slice(0, 6000),
+      }));
+      const res = await fetch("/api/debrief", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          caseId: caseData.id,
+          elapsedMin: sim.elapsedMin,
+          orderedLog,
+          referralStartedAtMin: sim.referralStartedAtMin,
+          history,
+        }),
+        // A hung upstream must land in the error+retry state, not leave the
+        // "attending is reviewing" pulse spinning forever.
+        signal: AbortSignal.timeout(180_000),
+      });
+      if (!res.ok) throw new Error(`debrief ${res.status}`);
+      setDebrief((await res.json()) as DebriefData);
+      setDebriefPhase("ready");
+    } catch {
+      setDebriefPhase("error");
+    }
+  }
+
+  // The debrief fires by itself the moment the final scene finishes
+  // streaming — the player never has to ask for their own reckoning.
+  useEffect(() => {
+    if (sim?.caseOver && phase === "ready" && debriefPhase === "idle") {
+      void fetchDebrief();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sim?.caseOver, phase, debriefPhase]);
+
+  // One file with everything a reshoot needs: every input the player typed,
+  // every world beat, the order log, and the debrief itself.
+  function exportSession() {
+    const data = {
+      app: "SALUS Zero",
+      caseId: caseData?.id,
+      exportedAt: new Date().toISOString(),
+      endReason: sim?.endReason ?? null,
+      elapsedMin: sim?.elapsedMin ?? null,
+      orderedLog,
+      transcript: transcript.map((e) => ({
+        role: e.role,
+        text: e.text,
+        meta: e.meta ?? null,
+      })),
+      debrief,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `salus-zero-session-${new Date()
+      .toISOString()
+      .replace(/[:.]/g, "-")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   const busy = phase === "loading" || phase === "streaming";
@@ -461,24 +573,52 @@ export default function App() {
                 </div>
               </div>
 
-              {sim?.caseOver && phase !== "streaming" && (
+              {sim?.caseOver && phase !== "streaming" && debriefPhase !== "ready" && (
                 <div className="rounded-xl border border-amber-800/60 bg-amber-950/30 p-5 text-sm text-amber-200 leading-relaxed flex flex-col items-start gap-3">
                   <p>
                     <span className="font-semibold">
                       The night is decided.
                     </span>{" "}
                     {sim.endReason === "referral"
-                      ? "The referral chain is active — the ambulance is on the road. What this night cost, and what it taught, comes with the debrief."
-                      : "The case clock has run out. What this night cost, and what it taught, comes with the debrief."}
+                      ? "The referral chain is active — the ambulance is on the road."
+                      : "The case clock has run out."}
                   </p>
-                  <button
-                    onClick={beginCase}
-                    className="rounded-lg border border-amber-700 bg-amber-900/40 px-4 py-1.5 text-xs font-medium text-amber-200 transition hover:bg-amber-900/70"
-                  >
-                    Begin another night
-                  </button>
+                  {debriefPhase === "error" ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-red-300">
+                        The debrief could not be prepared.
+                      </span>
+                      <button
+                        onClick={() => void fetchDebrief()}
+                        className="rounded-lg border border-amber-700 bg-amber-900/40 px-4 py-1.5 text-xs font-medium text-amber-200 transition hover:bg-amber-900/70"
+                      >
+                        Try again
+                      </button>
+                      <button
+                        onClick={beginCase}
+                        className="rounded-lg border border-neutral-700 px-4 py-1.5 text-xs text-neutral-400 transition hover:border-neutral-500 hover:text-neutral-200"
+                      >
+                        Begin another night
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="animate-pulse text-amber-300/80">
+                      The attending is reviewing the night…
+                    </p>
+                  )}
                 </div>
               )}
+
+              {sim?.caseOver &&
+                phase !== "streaming" &&
+                debriefPhase === "ready" &&
+                debrief && (
+                  <DebriefPanel
+                    debrief={debrief}
+                    onRestart={beginCase}
+                    onExport={exportSession}
+                  />
+                )}
 
               {sim?.pendingReferral && !sim.caseOver && referralAction && (
                 <div className="rounded-xl border border-amber-700 bg-amber-950/40 p-4 text-sm text-amber-200 flex flex-wrap items-center justify-between gap-3">
@@ -746,6 +886,177 @@ function VitalsPanel({
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+// The money shot: score gauge + reveal + teaching panels. Everything here is
+// render-only — the score arithmetic lives in the worker (score.ts).
+function DebriefPanel({
+  debrief,
+  onRestart,
+  onExport,
+}: {
+  debrief: DebriefData;
+  onRestart: () => void;
+  onExport: () => void;
+}) {
+  return (
+    <section className="rounded-xl border border-neutral-700 bg-neutral-900/80 p-6 flex flex-col gap-6">
+      <header className="flex flex-wrap items-center gap-6">
+        <ScoreGauge score={debrief.score} />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xs uppercase tracking-wider text-neutral-500 mb-1.5">
+            Debrief — the night, revealed
+          </h2>
+          <p className="text-[15px] leading-relaxed text-neutral-100">
+            {debrief.groundTruthReveal}
+          </p>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-lg border border-emerald-900/60 bg-emerald-950/20 p-4">
+          <h3 className="text-xs uppercase tracking-wider text-emerald-400/90 mb-2.5">
+            What you did well
+          </h3>
+          {debrief.strengths.length === 0 ? (
+            <p className="text-sm leading-relaxed text-neutral-400">
+              The record offers little to praise tonight — the lesson below is
+              where this night's value lives.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2 text-sm leading-relaxed text-neutral-200">
+              {debrief.strengths.map((s, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="shrink-0 text-emerald-500">✓</span>
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-4">
+          <h3 className="text-xs uppercase tracking-wider text-amber-400/90 mb-2.5">
+            What the night cost
+          </h3>
+          {debrief.misses.length === 0 ? (
+            <p className="text-sm leading-relaxed text-neutral-400">
+              Nothing consequential — a clean night.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2 text-sm leading-relaxed text-neutral-200">
+              {debrief.misses.map((m, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="shrink-0 text-amber-500">!</span>
+                  <span>{m}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-4">
+        <h3 className="text-xs uppercase tracking-wider text-neutral-500 mb-2">
+          The lesson
+        </h3>
+        <p className="text-sm leading-relaxed text-neutral-200">
+          {debrief.resourceLesson}
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-sky-900/60 bg-sky-950/20 p-4">
+        <h3 className="text-xs uppercase tracking-wider text-sky-400/90 mb-2">
+          If this hospital had everything — the other playbook
+        </h3>
+        <p className="text-sm leading-relaxed text-neutral-300 italic">
+          {debrief.ctContrast}
+        </p>
+      </div>
+
+      <details>
+        <summary className="cursor-pointer select-none text-xs uppercase tracking-wider text-neutral-500 transition hover:text-neutral-300">
+          How the score was computed
+        </summary>
+        <div className="mt-3 flex flex-col gap-3">
+          {debrief.axes.map((axis) => (
+            <div key={axis.key}>
+              <div className="flex items-baseline justify-between gap-3 text-sm text-neutral-300">
+                <span>{axis.label}</span>
+                <span className="tabular-nums">
+                  {axis.earned}/{axis.max}
+                </span>
+              </div>
+              <ul className="mt-1 flex flex-col gap-0.5 text-[13px] leading-relaxed text-neutral-500">
+                {axis.lines.map((l, i) => (
+                  <li key={i}>{l}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </details>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={onRestart}
+          className="rounded-lg bg-neutral-100 px-5 py-2 text-sm font-medium text-neutral-900 transition hover:bg-white"
+        >
+          Begin another night
+        </button>
+        <button
+          onClick={onExport}
+          className="rounded-lg border border-neutral-700 px-4 py-2 text-xs text-neutral-400 transition hover:border-neutral-500 hover:text-neutral-200"
+        >
+          Download session log
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ScoreGauge({ score }: { score: number }) {
+  const r = 52;
+  const circumference = 2 * Math.PI * r;
+  const frac = Math.max(0, Math.min(score, 100)) / 100;
+  const tone =
+    score >= 80
+      ? "text-emerald-400"
+      : score >= 55
+        ? "text-amber-400"
+        : "text-red-400";
+  return (
+    <div className="relative h-32 w-32 shrink-0">
+      <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+        <circle
+          cx="60"
+          cy="60"
+          r={r}
+          fill="none"
+          strokeWidth="10"
+          className="stroke-neutral-800"
+        />
+        <circle
+          cx="60"
+          cy="60"
+          r={r}
+          fill="none"
+          strokeWidth="10"
+          strokeLinecap="round"
+          stroke="currentColor"
+          strokeDasharray={`${circumference * frac} ${circumference}`}
+          className={tone}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={`text-3xl font-semibold tabular-nums ${tone}`}>
+          {score}
+        </span>
+        <span className="text-[10px] uppercase tracking-wider text-neutral-500">
+          / 100
+        </span>
+      </div>
     </div>
   );
 }

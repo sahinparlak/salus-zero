@@ -98,6 +98,23 @@ export const CaseSpecSchema = z.object({
   scoringSignals: z.object({
     referTargetByMin: z.number(), // referral initiated before this = full marks
     forbiddenResources: z.array(z.string()),
+    // Action ids that mean WAITING for a resource this profile lacks (e.g.
+    // "wait for the morning sonographer"). Asking for a forbidden resource
+    // once is free — waiting for one burns disease time, so it is the
+    // heaviest resource-discipline penalty.
+    waitActions: z.array(z.string()).default([]),
+    // Mimic-exclusion orders that earn differential credit (once each, on
+    // first order). Convention: points across a case sum to 15 so every
+    // case scores on the same 100-point scale (see score.ts).
+    differentialActions: z
+      .array(
+        z.object({
+          actionId: z.string(),
+          points: z.number(),
+          label: z.string(),
+        }),
+      )
+      .default([]),
   }),
   debrief: z.object({
     goals: z.array(z.string()),

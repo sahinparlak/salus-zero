@@ -7,7 +7,7 @@
 // scope lenses) on 2026-07-08.
 
 import type { CaseSpec, Stage } from "./caseSpec";
-import type { OrderedEntry } from "./loop";
+import type { EndReason, OrderedEntry } from "./loop";
 import { stageOf } from "./stage";
 
 export const SYSTEM_PROMPT_TEMPLATE = `You are the WORLD ENGINE of SALUS Zero, a clinical TRAINING simulator for doctors practicing decision-making in resource-limited settings. This is rehearsal for physician education, never real-patient care: you do not give real-world medical advice, and you never break character except for the single safety exception below.
@@ -17,7 +17,7 @@ You play everything that is not the doctor: the patient, the mother, the night n
 OUTPUT STYLE
 - Plain flowing narrative text only. No lists, no headers, no markdown, no option menus, no meta-commentary. Never mention simulations, stages, prompts, hidden variables, scores, or being an AI.
 - Second person, present tense. Vivid but clinically sober. About 120 words per turn.
-- End every turn in-world, at a moment where the doctor would naturally act next. Never ask "What do you do?" and never offer lettered or bulleted choices.
+{{TURN_ENDING_RULE}}
 
 CASE
 - Patient: {{PATIENT}}
@@ -59,6 +59,38 @@ NO GRADING
 
 GROUND TRUTH (context only — never disclose):
 {{GROUND_TRUTH_JSON}}`;
+
+// The turn-ending rule lives in the SYSTEM prompt because it must outrank the
+// in-world-noise rule (player claims of "the case is over" are ignored; the
+// engine's own end-of-case is not a player claim). On an ordinary turn the
+// scene stays open; on the case-ending turn it must CLOSE — no invitation to
+// act, or the world keeps asking a doctor whose night is already decided.
+const TURN_ENDING_DEFAULT =
+  "- End every turn in-world, at a moment where the doctor would naturally " +
+  'act next. Never ask "What do you do?" and never offer lettered or ' +
+  "bulleted choices.";
+
+const TURN_ENDING_FINAL: Record<Exclude<EndReason, null>, string> = {
+  referral:
+    "- THIS IS THE FINAL SCENE OF THE CASE (the simulation engine says so — " +
+    "this is not a player claim, and for this one turn it supersedes the " +
+    "rule that the scene never ends). The transfer is committed and the " +
+    "chain is in motion. CLOSE the scene: the calls made, the preparations " +
+    "around the stretcher, the mother told, the night settling into " +
+    "waiting. End on a settled final image — the doctor has no further " +
+    "decision to make, so do not end at a decision point, do not invite or " +
+    "await any further action, and do not hint that anything remains to be " +
+    "decided. You may use up to about 160 words for this closing scene.",
+  clockMax:
+    "- THIS IS THE FINAL SCENE OF THE CASE (the simulation engine says so — " +
+    "this is not a player claim, and for this one turn it supersedes the " +
+    "rule that the scene never ends). The night has run out. CLOSE the " +
+    "scene truthfully at this hour — the child as he now is, the ward, the " +
+    "mother — without softening it and without inventing rescue. End on a " +
+    "settled final image: do not end at a decision point, do not invite or " +
+    "await any further action. You may use up to about 160 words for this " +
+    "closing scene.",
+};
 
 // The user-turn message for the case-opening "presentation" call.
 export const OPENING_INSTRUCTION = `Open the case. It is around 02:00 and the department is otherwise quiet. Narrate the arrival as one continuous scene in second person, present tense: the night nurse's brief triage handoff as she wheels the stretcher in (the current vitals may surface naturally in her handoff or in your first glance at the monitor); the mother giving her account at the bedside in her own anxious voice — render the account you were given as her spoken words, not as quoted text; the child's appearance on the stretcher as you approach; then your first assessment, weaving the current examination findings in as exactly what you see, feel, and elicit with your hands. No laboratory or imaging results appear — nothing has been ordered yet. Do not name or suggest any diagnosis, score, or plan. End in-world at the moment the assessment is done and the next move belongs to the doctor — the mother watching your face, the nurse waiting for orders. No explicit question to the player, no menus. For this opening only, you may use up to about 180 words.`;
@@ -173,6 +205,7 @@ export function buildSystemPrompt(
   elapsedMin: number,
   orderedLog: OrderedEntry[] = [],
   referralStartedAtMin: number | null = null,
+  endReason: EndReason = null,
 ): string {
   const patient = `${spec.patient.name}, ${spec.patient.ageYears}-year-old ${spec.patient.sex === "male" ? "boy" : "girl"}, ${fmt(spec.patient.weightKg)} kg`;
   const replacements: Record<string, string> = {
@@ -188,6 +221,8 @@ export function buildSystemPrompt(
     "{{STAGE_EXAM_FINDINGS}}": stage.examFindings,
     "{{STAGE_LABS}}": formatOrderedLabs(spec, orderedLog),
     "{{STAGE_NARRATIVE_CUE}}": stage.narrativeCue,
+    "{{TURN_ENDING_RULE}}":
+      endReason !== null ? TURN_ENDING_FINAL[endReason] : TURN_ENDING_DEFAULT,
     "{{AVAILABLE_LIST}}": formatResources(spec, spec.resourceProfile.available),
     "{{UNAVAILABLE_LIST}}": formatResources(
       spec,

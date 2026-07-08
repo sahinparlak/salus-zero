@@ -328,9 +328,18 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
       "A single score is weaker than its trajectory — serial examination beats any one number, and a dip during observation is not reassurance.",
     ],
   },
+  // Scoring weights are a DRAFT pending Dr. Şahin's sign-off, like every
+  // clinical value in this file (see docs/GUN3-SKOR-ONAY.md).
   scoringSignals: {
     referTargetByMin: 90,
     forbiddenResources: ["ct_abd", "us_abd"],
+    waitActions: ["await_morning_us"],
+    differentialActions: [
+      { actionId: "glucose_ketone", points: 6, label: "DKA excluded — capillary glucose and ketones checked" },
+      { actionId: "urinalysis", points: 3, label: "UTI mimic worked up — urinalysis" },
+      { actionId: "xray_abd", points: 3, label: "Constipation and basal pneumonia excluded — abdominal film" },
+      { actionId: "cbc", points: 3, label: "Inflammatory trajectory quantified — CBC" },
+    ],
   },
   debrief: {
     goals: [
