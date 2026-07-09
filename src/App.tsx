@@ -18,6 +18,15 @@ interface OrderedEntry {
   atMin: number;
 }
 
+// One turn's observed vitals, stamped with the minute they were seen. This is
+// ONLY ever the values the client already received turn-by-turn (from the
+// x-salus-state header) — never a reconstruction of hidden or future
+// physiology. The monitor's deltas and trend read straight off this log.
+interface VitalsSnapshot {
+  atMin: number;
+  vitals: Vitals;
+}
+
 interface DebriefAxis {
   key: string;
   label: string;
@@ -97,7 +106,9 @@ const CONNECTION_NOTE =
 // envelope is versioned — bump SESSION_V when the shape changes and old
 // sessions are silently dropped instead of half-restored.
 const STORAGE_KEY = "salus-zero-session";
-const SESSION_V = 1;
+// v2: added vitalsLog (the observed-vitals trend). Bumping drops v1 sessions
+// on load rather than restoring one without a log.
+const SESSION_V = 2;
 
 interface StoredSession {
   v: number;
@@ -105,6 +116,7 @@ interface StoredSession {
   transcript: TranscriptEntry[];
   sim: SimState;
   orderedLog: OrderedEntry[];
+  vitalsLog: VitalsSnapshot[];
   debrief: DebriefData | null;
 }
 
@@ -119,6 +131,7 @@ function loadStoredSession(): StoredSession | null {
     // to a fresh start, not a render crash on every load.
     if (typeof s.sim.elapsedMin !== "number" || !Array.isArray(s.orderedLog))
       return null;
+    if (!Array.isArray(s.vitalsLog)) return null;
     if (s.debrief !== null && !Array.isArray(s.debrief?.axes)) return null;
     // A finished night has nothing a refresh could destroy — restoring it
     // would open the app on a spoiled reveal (or fire an unattended debrief
@@ -172,6 +185,10 @@ export default function App() {
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [sim, setSim] = useState<SimState | null>(null);
   const [orderedLog, setOrderedLog] = useState<OrderedEntry[]>([]);
+  // The observed-vitals trend — one snapshot appended each turn from the sim
+  // state header. Seeds the monitor's deltas and sparkline. Never holds
+  // anything the client didn't already see on screen.
+  const [vitalsLog, setVitalsLog] = useState<VitalsSnapshot[]>([]);
   const [input, setInput] = useState("");
   const [phase, setPhase] = useState<"idle" | "loading" | "streaming" | "ready">(
     "idle",
@@ -198,6 +215,7 @@ export default function App() {
     setTranscript(s.transcript);
     setSim(s.sim);
     setOrderedLog(s.orderedLog);
+    setVitalsLog(s.vitalsLog);
     setDebrief(s.debrief);
     setDebriefPhase(s.debrief ? "ready" : "idle");
     setShowReferralConfirm(s.sim.pendingReferral && !s.sim.caseOver);
@@ -215,13 +233,14 @@ export default function App() {
         transcript,
         sim,
         orderedLog,
+        vitalsLog,
         debrief,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
     } catch {
       /* storage full or unavailable — the night just becomes volatile */
     }
-  }, [phase, caseData, transcript, sim, orderedLog, debrief]);
+  }, [phase, caseData, transcript, sim, orderedLog, vitalsLog, debrief]);
 
   useEffect(() => {
     const el = transcriptRef.current;
@@ -251,6 +270,12 @@ export default function App() {
         endReason: state.endReason,
       });
       setOrderedLog(state.orderedLog);
+      // Record this turn's observed vitals for the monitor's trend. Pure
+      // append of values already surfaced on screen — no reconstruction.
+      setVitalsLog((prev) => [
+        ...prev,
+        { atMin: state.elapsedMin, vitals: state.vitals },
+      ]);
       // Every turn recomputes the confirm strip from the worker's verdict —
       // a button-armed strip that wasn't confirmed clears with the turn.
       setShowReferralConfirm((state.pendingReferral ?? false) && !state.caseOver);
@@ -282,6 +307,7 @@ export default function App() {
     setTranscript([]);
     setSim(null);
     setOrderedLog([]);
+    setVitalsLog([]);
     setDebrief(null);
     setDebriefPhase("idle");
     setShowReferralConfirm(false);
@@ -557,9 +583,14 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col">
-      <div className="w-full bg-amber-950/40 border-b border-amber-800/50 text-amber-200 text-xs px-4 py-2 text-center">
-        TRAINING SIMULATION — not medical advice. Doses and thresholds are
+    <div className="relative min-h-screen text-neutral-100 flex flex-col">
+      <NightField />
+      {!caseData ? (
+        <ColdOpen phase={phase} error={error} onBegin={beginCase} />
+      ) : (
+      <>
+      <div className="w-full border-b border-neutral-800/60 px-4 py-1.5 text-center text-[11px] tracking-wide text-neutral-500">
+        Training simulation — not medical advice. Doses and thresholds are
         illustrative.
       </div>
 
@@ -574,36 +605,17 @@ export default function App() {
             </p>
           </div>
           {caseData && sim && (
-            <div className="flex flex-wrap gap-2 items-center">
-              <span className="rounded-full border border-neutral-700 bg-neutral-900 px-3 py-1 text-sm font-medium tabular-nums">
-                {wallClock(sim.elapsedMin)}
-                <span className="ml-2 text-xs text-neutral-500">
-                  T+{Math.round(sim.elapsedMin)} min
-                </span>
-              </span>
-              <span className="rounded-full border border-amber-900/60 bg-amber-950/30 px-3 py-1 text-xs text-amber-300/80">
-                ACCELERATED SIMULATION — case clock is compressed
-              </span>
+            // On phones the clock lives in the sticky MobileVitalsStrip; the
+            // header clock only shows md+ (where title + clock share a line,
+            // so justify-between right-aligns it instead of stranding it).
+            <div className="hidden md:block">
+              <Clock
+                elapsedMin={sim.elapsedMin}
+                referralStartedAtMin={sim.referralStartedAtMin}
+              />
             </div>
           )}
         </header>
-
-        {!caseData && (
-          <section className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-8 flex flex-col items-start gap-4">
-            <p className="text-lg text-neutral-200 max-w-xl leading-relaxed">
-              Somewhere tonight, a child has abdominal pain — in a hospital
-              with no CT, no sonographer, no surgeon in the building. Only a
-              clock, and you.
-            </p>
-            <button
-              onClick={beginCase}
-              disabled={phase === "loading"}
-              className="rounded-lg bg-neutral-100 px-5 py-2 text-sm font-medium text-neutral-900 transition hover:bg-white disabled:opacity-50"
-            >
-              {phase === "loading" ? "Opening the case…" : "Begin the night shift"}
-            </button>
-          </section>
-        )}
 
         {error && (
           <p className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
@@ -612,7 +624,13 @@ export default function App() {
         )}
 
         {caseData && sim && (
-          <MobileVitalsStrip data={caseData} vitals={sim.vitals} />
+          <MobileVitalsStrip
+            data={caseData}
+            vitals={sim.vitals}
+            elapsedMin={sim.elapsedMin}
+            referralStartedAtMin={sim.referralStartedAtMin}
+            vitalsLog={vitalsLog}
+          />
         )}
 
         {caseData && (
@@ -664,26 +682,41 @@ export default function App() {
                             {entry.text}
                           </div>
                           {entry.meta && (
-                            <div className="mt-1.5 text-[11px] tabular-nums">
-                              <span className="text-amber-300/70">
-                                ⏱ +{entry.meta.turnCostMin} min
+                            <div className="mt-2 flex flex-col gap-2 text-[11px]">
+                              <div className="tabular-nums">
+                                <span className="text-ember-400/80">
+                                  +{entry.meta.turnCostMin} min
+                                </span>
                                 {entry.meta.registered.length > 0 && (
-                                  <>
+                                  <span className="text-neutral-400">
                                     {" · "}
                                     {entry.meta.registered
                                       .map((a) => a.label)
                                       .join(" · ")}
-                                  </>
+                                  </span>
                                 )}
-                              </span>
-                              {entry.meta.attempted.length > 0 && (
-                                <span className="text-red-400/80">
-                                  {" · "}
-                                  {entry.meta.attempted
-                                    .map((a) => `✗ ${a.label} — ${a.reason ?? "unavailable"}`)
-                                    .join(" · ")}
-                                </span>
-                              )}
+                              </div>
+                              {/* The signature moment: a request the building
+                                  cannot answer is struck out and stamped, not
+                                  quietly greyed. This is "you can't order a CT." */}
+                              {entry.meta.attempted.map((a, k) => (
+                                <div
+                                  key={k}
+                                  className="flex flex-wrap items-center gap-x-2 gap-y-1"
+                                >
+                                  <span className="text-sm text-neutral-400 line-through decoration-red-500/60">
+                                    {a.label}
+                                  </span>
+                                  <span className="inline-block -rotate-3 rounded border border-red-500/70 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-red-300 motion-safe:animate-stamp">
+                                    Unavailable here
+                                  </span>
+                                  {a.reason && (
+                                    <span className="text-neutral-500">
+                                      — {a.reason}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -692,7 +725,10 @@ export default function App() {
                           {entry.text}
                           {phase === "streaming" &&
                             i === transcript.length - 1 && (
-                              <span className="animate-pulse text-neutral-500">
+                              <span
+                                aria-hidden
+                                className="text-neutral-500 motion-safe:animate-pulse"
+                              >
                                 ▍
                               </span>
                             )}
@@ -732,7 +768,7 @@ export default function App() {
                       </button>
                     </div>
                   ) : (
-                    <p className="animate-pulse text-amber-300/80">
+                    <p className="motion-safe:animate-pulse text-amber-300/80">
                       The attending is reviewing the night…
                     </p>
                   )}
@@ -804,6 +840,7 @@ export default function App() {
                   data={caseData}
                   vitals={sim.vitals}
                   elapsedMin={sim.elapsedMin}
+                  vitalsLog={vitalsLog}
                 />
               )}
               <ConstraintBoard board={caseData.constraintBoard} />
@@ -816,7 +853,110 @@ export default function App() {
           reviewed by Dr. Şahin Parlak (Pediatric Surgery).
         </footer>
       </main>
+      </>
+      )}
     </div>
+  );
+}
+
+// The ward at 02:00 — pure atmosphere, no data, fixed behind everything.
+// A cold near-black base, one warm sodium lamp pooled off-center over the
+// narrative column (the panels are 40% transparent, so it bleeds through
+// them and warms that side while the instrument aside stays cold), a colder
+// blue pool toward the instrument edge, and a vignette pulling the corners
+// of the room into the dark. Opacity-only motion, gated for reduced-motion.
+function NightField() {
+  return (
+    <div
+      aria-hidden
+      className="fixed inset-0 -z-10 overflow-hidden bg-neutral-950"
+    >
+      <div
+        className="absolute left-[38%] top-[-12%] h-[85vh] w-[85vh] -translate-x-1/2 rounded-full opacity-60 motion-safe:animate-lamp-breath"
+        style={{
+          background:
+            "radial-gradient(circle, oklch(0.73 0.15 62 / 0.16), oklch(0.73 0.15 62 / 0.05) 45%, transparent 70%)",
+        }}
+      />
+      <div
+        className="absolute right-[-12%] bottom-[-14%] h-[70vh] w-[70vh] rounded-full opacity-50"
+        style={{
+          background:
+            "radial-gradient(circle, oklch(0.30 0.05 255 / 0.30), transparent 70%)",
+        }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(120% 100% at 45% 28%, transparent 52%, oklch(0.10 0.02 255 / 0.55) 100%)",
+        }}
+      />
+    </div>
+  );
+}
+
+// The cold open — the first fifteen seconds. No card, no header, no chrome:
+// three objects in a wide dark field. The clock holding at 02:00, the hook
+// surfacing clause by clause out of the blur, and one warm door in. Shown
+// only when no case is loaded, so nothing secret is ever on screen — just
+// the night, and its single dynamic value, wallClock(0) = "02:00".
+function ColdOpen({
+  phase,
+  error,
+  onBegin,
+}: {
+  phase: "idle" | "loading" | "streaming" | "ready";
+  error: string | null;
+  onBegin: () => void;
+}) {
+  return (
+    <main className="relative flex min-h-[100svh] flex-col items-center justify-center gap-10 px-6 py-16 text-center">
+      <p className="text-6xl font-semibold leading-none tabular-nums text-neutral-100 motion-safe:animate-reveal-in sm:text-7xl">
+        {wallClock(0)}
+      </p>
+
+      <div className="flex max-w-xl flex-col gap-4 font-vignette">
+        <p
+          className="text-lg leading-relaxed text-neutral-300 motion-safe:animate-reveal-in sm:text-xl"
+          style={{ animationDelay: "250ms" }}
+        >
+          Somewhere tonight, a child has abdominal pain.
+        </p>
+        <p
+          className="text-lg leading-relaxed text-neutral-400 motion-safe:animate-reveal-in sm:text-xl"
+          style={{ animationDelay: "750ms" }}
+        >
+          No CT. No sonographer. No surgeon in the building.
+        </p>
+        <p
+          className="text-2xl leading-snug text-neutral-100 motion-safe:animate-reveal-in sm:text-3xl"
+          style={{ animationDelay: "1300ms" }}
+        >
+          The nearest surgeon is you.
+        </p>
+      </div>
+
+      <button
+        onClick={onBegin}
+        disabled={phase === "loading"}
+        className="rounded-lg bg-ember-400 px-6 py-3 text-sm font-semibold text-neutral-950 transition hover:bg-ember-300 disabled:opacity-60 motion-safe:animate-reveal-in"
+        style={{ animationDelay: "1700ms" }}
+      >
+        {phase === "loading" ? "Opening the case…" : "Begin the night shift"}
+      </button>
+
+      {error && (
+        <p className="max-w-md rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+          {error}
+        </p>
+      )}
+
+      <p className="mt-4 max-w-md text-[11px] leading-relaxed tracking-wide text-neutral-600">
+        Training simulation — not medical advice. Doses and thresholds are
+        illustrative.
+      </p>
+    </main>
   );
 }
 
@@ -955,15 +1095,123 @@ function ActionButton({
 
 // On phones the vitals panel sits below the transcript, off-screen during
 // play — this sticky strip keeps the monitor in view. Hidden on md+.
+// Display constants — sugar over the sim, the way wallClock invents "02:00".
+// NEVER engine arithmetic: the case can end (clockMax) before the ambulance
+// arrives, so the ETA is always shown as an approximation ("~06:47").
+const AMBULANCE_ETA_MIN = 240; // ~4 hours from the city — the north-star line
+const NIGHT_RUNWAY_MIN = 600; // the night's length, for the horizon scale only
+
+// Heat rises monotonically with elapsed time — amber → ember → red. Keyed on
+// elapsedMin ONLY (public); never on stage, which is secret. The clock is the
+// antagonist: the longer the night runs, the hotter it reads.
+function clockHeat(elapsedMin: number): { text: string; bar: string } {
+  if (elapsedMin >= 300) return { text: "text-red-400", bar: "bg-red-500" };
+  if (elapsedMin >= 150) return { text: "text-ember-400", bar: "bg-ember-500" };
+  if (elapsedMin >= 60) return { text: "text-ember-300", bar: "bg-ember-400" };
+  return { text: "text-neutral-100", bar: "bg-neutral-500" };
+}
+
+// The clock as a first-class antagonist, not a chip. Wall clock large and
+// heat-toned; the T+ debt below; a horizon bar for the night's runway bleeding
+// away — which resolves to the ambulance ETA once the referral is committed.
+function Clock({
+  elapsedMin,
+  referralStartedAtMin,
+}: {
+  elapsedMin: number;
+  referralStartedAtMin: number | null;
+}) {
+  const heat = clockHeat(elapsedMin);
+  const frac = Math.max(0, Math.min(elapsedMin / NIGHT_RUNWAY_MIN, 1));
+  const refAt = referralStartedAtMin;
+  const etaClock = refAt !== null ? wallClock(refAt + AMBULANCE_ETA_MIN) : null;
+
+  // The clock doesn't tick — it lurches. Each turn's spent minutes surface as
+  // a "wound" that rises off the clock and fades. The number also lives in the
+  // transcript, so the flash is skipped entirely under reduced motion.
+  const prev = useRef(elapsedMin);
+  const woundKey = useRef(0);
+  const [wound, setWound] = useState<{ delta: number; key: number } | null>(
+    null,
+  );
+  useEffect(() => {
+    const delta = Math.round(elapsedMin - prev.current);
+    prev.current = elapsedMin;
+    if (delta <= 0 || prefersReducedMotion()) return;
+    woundKey.current += 1;
+    setWound({ delta, key: woundKey.current });
+    const t = setTimeout(() => setWound(null), 1600);
+    return () => clearTimeout(t);
+  }, [elapsedMin]);
+
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      <div className="relative flex items-baseline gap-2">
+        <span
+          className={`text-3xl font-semibold leading-none tabular-nums transition-colors duration-500 ${heat.text}`}
+        >
+          {wallClock(elapsedMin)}
+        </span>
+        {wound && (
+          <span
+            key={wound.key}
+            className="absolute -top-4 right-0 text-xs font-medium tabular-nums text-red-400 motion-safe:animate-wound"
+          >
+            +{wound.delta} min
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 text-[11px] tabular-nums text-neutral-500">
+        <span>T+{Math.round(elapsedMin)} min</span>
+        <span className="text-neutral-700">·</span>
+        <span className="tracking-wide">accelerated</span>
+      </div>
+      {refAt !== null ? (
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-ember-300">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-ember-400 motion-safe:animate-pulse" />
+          Ambulance dispatched · arriving ~{etaClock}
+        </div>
+      ) : (
+        <div
+          className="h-1 w-44 overflow-hidden rounded-full bg-neutral-800"
+          title="The night's runway"
+        >
+          <div
+            className={`h-full rounded-full transition-[width] duration-500 ease-out ${heat.bar}`}
+            style={{ width: `${frac * 100}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MobileVitalsStrip({
   data,
   vitals,
+  elapsedMin,
+  referralStartedAtMin,
+  vitalsLog,
 }: {
   data: PublicCase;
   vitals: Vitals;
+  elapsedMin: number;
+  referralStartedAtMin: number | null;
+  vitalsLog: VitalsSnapshot[];
 }) {
+  const heat = clockHeat(elapsedMin);
   return (
     <div className="md:hidden sticky top-0 z-10 -mx-2 flex gap-2 overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-950/95 px-2 py-2 backdrop-blur">
+      <span className="shrink-0 rounded-md border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs tabular-nums">
+        <span className={`font-semibold ${heat.text}`}>
+          {wallClock(elapsedMin)}
+        </span>
+        <span className="ml-1.5 text-neutral-600">
+          {referralStartedAtMin !== null
+            ? "· amb."
+            : `T+${Math.round(elapsedMin)}`}
+        </span>
+      </span>
       {data.vitalsCatalog.map((v) => {
         const value = vitals[v.key];
         const critical =
@@ -975,18 +1223,33 @@ function MobileVitalsStrip({
           : abnormal
             ? "text-amber-300"
             : "text-neutral-100";
+        const delta = vitalDelta(vitalsLog, v.key);
+        const changed = delta !== null && delta !== 0;
         return (
           <span
             key={v.key}
             className="shrink-0 rounded-md border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs tabular-nums"
           >
             <span className="text-neutral-500">{v.label.split(" ")[0]}</span>{" "}
-            <span className={`font-medium ${tone}`}>
+            <span
+              key={`${v.key}-${Math.round(elapsedMin)}`}
+              className={`font-medium ${tone}${changed ? " motion-safe:animate-value-flash" : ""}`}
+            >
               {/* toFixed keeps the decimal stable — "38.0", never a
                   flickering "38" between "37.9" and "38.1" on camera */}
               {value.toFixed(v.precision)}
               {v.unit ? ` ${v.unit}` : ""}
             </span>
+            {delta !== null && delta !== 0 && (
+              <span className="ml-1 text-[10px] text-neutral-500">
+                {delta > 0 ? "▲" : "▼"}
+              </span>
+            )}
+            {(critical || abnormal) && (
+              <span className="sr-only">
+                {critical ? "critical" : "abnormal"}
+              </span>
+            )}
           </span>
         );
       })}
@@ -994,47 +1257,219 @@ function MobileVitalsStrip({
   );
 }
 
+// The delta a vital moved since the previous observed turn — null on the very
+// first reading. Sign and magnitude only; NEVER colored good/bad by direction,
+// because a FALLING pain at perforation is the trap, not good news.
+function vitalDelta(log: VitalsSnapshot[], key: keyof Vitals): number | null {
+  if (log.length < 2) return null;
+  return log[log.length - 1].vitals[key] - log[log.length - 2].vitals[key];
+}
+
+function DeltaChip({
+  delta,
+  precision,
+}: {
+  delta: number | null;
+  precision: number;
+}) {
+  if (delta === null) return null;
+  if (delta === 0)
+    return <span className="text-[11px] text-neutral-600">–</span>;
+  return (
+    <span className="text-[11px] tabular-nums text-neutral-500">
+      {delta > 0 ? "▲" : "▼"}
+      {Math.abs(delta).toFixed(precision)}
+    </span>
+  );
+}
+
+// Bedside-monitor channel colors, assigned BY INDEX so the engine stays
+// domain-agnostic — any case's vitalsCatalog gets sensible channels. No channel
+// uses red: red is reserved for alarms. A critical value overrides its channel
+// color to alarm-red; an abnormal (but not critical) one goes amber.
+const MONITOR_CHANNELS = [
+  "oklch(0.86 0.19 150)", // green — ECG
+  "oklch(0.84 0.15 78)", // amber — resp
+  "oklch(0.84 0.13 200)", // cyan
+  "oklch(0.82 0.11 255)", // ice blue
+  "oklch(0.84 0.14 185)", // teal — pleth
+  "oklch(0.80 0.16 305)", // violet
+];
+const ALARM_RED = "oklch(0.70 0.20 25)";
+const ALARM_AMBER = "oklch(0.83 0.16 75)";
+
+function channelColor(index: number): string {
+  return MONITOR_CHANNELS[index % MONITOR_CHANNELS.length];
+}
+
+// A monitor trace: the observed-only trend drawn in the bedside idiom — a
+// glowing colored line with a bright head at the current value. It plots ONLY
+// values already seen turn-by-turn; it never fabricates an ECG morphology or
+// interpolates toward an unobserved value (the sim is turn-based, not live).
+function MonitorTrace({ values, color }: { values: number[]; color: string }) {
+  const w = 132;
+  const h = 30;
+  if (values.length < 2) {
+    return (
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        preserveAspectRatio="none"
+        aria-hidden
+        className="mt-1.5 h-7 w-full"
+      >
+        <line
+          x1="0"
+          y1={h / 2}
+          x2={w}
+          y2={h / 2}
+          stroke={color}
+          strokeWidth="1.25"
+          opacity="0.3"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+    );
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const pts = values.map((val, i) => [
+    (i / (values.length - 1)) * w,
+    h - ((val - min) / range) * (h - 8) - 4,
+  ]);
+  const d = pts
+    .map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`)
+    .join(" ");
+  const head = pts[pts.length - 1];
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      preserveAspectRatio="none"
+      aria-hidden
+      className="mt-1.5 h-7 w-full"
+      style={{ filter: `drop-shadow(0 0 2.5px ${color})` }}
+    >
+      <path
+        d={d}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle cx={head[0]} cy={head[1]} r="2.4" fill={color} />
+    </svg>
+  );
+}
+
+// The bedside monitor — a real vital-signs display, not a list. A dark gridded
+// screen; one color-coded channel per vital with a glowing number and its
+// observed trace; a red alarm blink on anything critical. Values keep
+// toFixed(precision) + the code-owned critical/abnormal thresholds; the delta
+// stays neutral (a falling pain at perforation is the trap, never good news).
 function VitalsPanel({
   data,
   vitals,
   elapsedMin,
+  vitalsLog,
 }: {
   data: PublicCase;
   vitals: Vitals;
   elapsedMin: number;
+  vitalsLog: VitalsSnapshot[];
 }) {
   return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-5">
-      <h3 className="text-xs uppercase tracking-wider text-neutral-500 mb-3">
-        Vitals · minute {Math.round(elapsedMin)}
-      </h3>
-      <ul className="flex flex-col gap-2">
-        {data.vitalsCatalog.map((v) => {
+    <div
+      className="overflow-hidden rounded-xl border border-neutral-800 p-5"
+      style={{
+        backgroundColor: "oklch(0.145 0.02 255)",
+        backgroundImage:
+          "linear-gradient(oklch(1 0 0 / 0.028) 1px, transparent 1px), linear-gradient(90deg, oklch(1 0 0 / 0.028) 1px, transparent 1px)",
+        backgroundSize: "22px 22px",
+      }}
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.25em] text-neutral-400">
+          Monitor
+        </h3>
+        <span className="font-mono text-[11px] tabular-nums text-neutral-500">
+          min {Math.round(elapsedMin)}
+        </span>
+      </div>
+      <ul className="flex flex-col divide-y divide-neutral-800/60">
+        {data.vitalsCatalog.map((v, i) => {
           const value = vitals[v.key];
           const critical =
             (v.criticalHigh !== null && value >= v.criticalHigh) ||
             (v.criticalLow !== null && value <= v.criticalLow);
           const abnormal = value < v.normalLow || value > v.normalHigh;
-          const tone = critical
-            ? "text-red-400"
+          const color = critical
+            ? ALARM_RED
             : abnormal
-              ? "text-amber-300"
-              : "text-neutral-100";
+              ? ALARM_AMBER
+              : channelColor(i);
+          const delta = vitalDelta(vitalsLog, v.key);
+          const changed = delta !== null && delta !== 0;
+          const series = vitalsLog.map((e) => e.vitals[v.key]);
+          // One animation at a time: a critical channel blinks (alarm); an
+          // unchanged-but-moved value flashes once. Never both on one node.
+          const anim = critical
+            ? " motion-safe:animate-monitor-alarm"
+            : changed
+              ? " motion-safe:animate-value-flash"
+              : "";
           return (
             <li
               key={v.key}
-              className="flex items-baseline justify-between gap-3 text-sm"
+              className="grid grid-cols-[1fr_auto] items-center gap-3 py-3"
             >
-              <span className="text-neutral-400">{v.label}</span>
-              <span className="text-right">
-                <span className={`font-medium tabular-nums ${tone}`}>
+              <div className="min-w-0">
+                <span className="flex items-center gap-1.5">
+                  {/* Non-color severity cue (alarm/caution glyph) beside the
+                      color-coded channel label; sr-only word sits by the value. */}
+                  {critical ? (
+                    <span aria-hidden className="text-[10px] text-red-400">
+                      ⚠
+                    </span>
+                  ) : abnormal ? (
+                    <span aria-hidden className="text-[10px] text-amber-400">
+                      △
+                    </span>
+                  ) : null}
+                  <span
+                    className="font-mono text-[10px] uppercase tracking-[0.15em]"
+                    style={{ color }}
+                  >
+                    {v.label}
+                  </span>
+                </span>
+                <MonitorTrace values={series} color={color} />
+              </div>
+              <div className="flex items-baseline gap-1.5 whitespace-nowrap text-right">
+                <span
+                  key={`${v.key}-${Math.round(elapsedMin)}`}
+                  className={`font-mono text-3xl font-semibold leading-none tabular-nums${anim}`}
+                  style={{ color, filter: `drop-shadow(0 0 7px ${color})` }}
+                >
+                  {/* toFixed keeps the decimal stable — "38.0", never a
+                      flickering "38" between "37.9" and "38.1" on camera */}
                   {value.toFixed(v.precision)}
-                  {v.unit ? ` ${v.unit}` : ""}
                 </span>
-                <span className="ml-2 text-[11px] text-neutral-600 tabular-nums">
-                  {v.normalLow}–{v.normalHigh}
-                </span>
-              </span>
+                <div className="flex flex-col items-start gap-0.5">
+                  {v.unit && (
+                    <span className="font-mono text-[10px] text-neutral-500">
+                      {v.unit}
+                    </span>
+                  )}
+                  <DeltaChip delta={delta} precision={v.precision} />
+                </div>
+                {(critical || abnormal) && (
+                  <span className="sr-only">
+                    {critical ? "critical" : "abnormal"}
+                  </span>
+                )}
+              </div>
             </li>
           );
         })}
@@ -1043,8 +1478,53 @@ function VitalsPanel({
   );
 }
 
-// The money shot: score gauge + reveal + teaching panels. Everything here is
-// render-only — the score arithmetic lives in the worker (score.ts).
+// Reads the OS reduced-motion setting once, synchronously, so animated
+// components can start at their final state instead of flashing then jumping.
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+// The sim's whole thesis in one line: commit the referral in time. Composed
+// PURELY from the payload's authoritative timing (referral minute vs the
+// target window), rendered through wallClock — the same display arithmetic
+// as the clock chip, never a new clinical claim.
+function timingHeadline(d: DebriefData): {
+  lead: string;
+  line: string;
+  late: boolean;
+} {
+  const target = wallClock(d.referTargetByMin);
+  if (d.referralStartedAtMin === null) {
+    return {
+      lead: "The referral never came.",
+      line: `The window closed at ${target} — unanswered.`,
+      late: true,
+    };
+  }
+  const delta = Math.round(d.referralStartedAtMin - d.referTargetByMin);
+  const at = wallClock(d.referralStartedAtMin);
+  if (delta > 0) {
+    return {
+      lead: `Referred at ${at} — ${delta} minute${delta === 1 ? "" : "s"} late.`,
+      line: `The window was ${target}. Right call; the clock was the cost.`,
+      late: true,
+    };
+  }
+  return {
+    lead: `Referred at ${at} — inside the window.`,
+    line: `The window was ${target}. The decision this night turned on.`,
+    late: false,
+  };
+}
+
+// The money shot: the night, revealed and reckoned. Reordered by dramatic
+// weight — reveal, verdict, the one thing, the quiet columns, the lesson.
+// Everything here is render-only; the score arithmetic lives in the worker
+// (score.ts) and only reaches the client after the case is over.
 function DebriefPanel({
   debrief,
   onRestart,
@@ -1054,54 +1534,94 @@ function DebriefPanel({
   onRestart: () => void;
   onExport: () => void;
 }) {
+  const thesis = timingHeadline(debrief);
   return (
-    <section className="rounded-xl border border-neutral-700 bg-neutral-900/80 p-6 flex flex-col gap-6">
-      <header className="flex flex-wrap items-center gap-6">
-        <ScoreGauge score={debrief.score} />
-        <div className="min-w-0 flex-1">
-          <h2 className="text-xs uppercase tracking-wider text-neutral-500 mb-1.5">
-            Debrief — the night, revealed
-          </h2>
-          <p className="text-[15px] leading-relaxed text-neutral-100">
-            {debrief.groundTruthReveal}
-          </p>
-        </div>
-      </header>
+    <section className="relative overflow-hidden rounded-2xl border border-ember-500/25 bg-neutral-900/70 p-6 sm:p-8 flex flex-col gap-8">
+      {/* Dawn — the one light-turn in the app. A warm wash rising from the
+          top edge: the night thinning toward morning as the reckoning is read. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-64"
+        style={{
+          background:
+            "radial-gradient(120% 100% at 50% 0%, oklch(0.73 0.15 62 / 0.14), transparent 70%)",
+        }}
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-lg border border-emerald-900/60 bg-emerald-950/20 p-4">
-          <h3 className="text-xs uppercase tracking-wider text-emerald-400/90 mb-2.5">
+      {/* 1 · REVEAL — the truth, withheld until the case was over. */}
+      <div className="relative motion-safe:animate-reveal-in">
+        <p className="text-[11px] uppercase tracking-[0.2em] text-ember-400/80 mb-3">
+          The truth, hidden until now
+        </p>
+        <p className="font-vignette text-[22px] leading-snug text-neutral-100 sm:text-[26px]">
+          {debrief.groundTruthReveal}
+        </p>
+      </div>
+
+      {/* 2 · VERDICT — the gauge, and the three axes it was built from. */}
+      <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-8">
+        <ScoreGauge score={debrief.score} />
+        <div className="flex min-w-0 flex-1 flex-col gap-3.5">
+          {debrief.axes.map((axis) => (
+            <AxisBar key={axis.key} axis={axis} />
+          ))}
+        </div>
+      </div>
+
+      {/* 3 · THE ONE THING — the clock, pulled out of the list into a headline. */}
+      <div
+        className={`relative rounded-xl border p-5 ${
+          thesis.late
+            ? "border-ember-500/30 bg-ember-500/[0.06]"
+            : "border-emerald-800/40 bg-emerald-950/20"
+        }`}
+      >
+        <p className="mb-2 text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+          The one thing
+        </p>
+        <p className="font-vignette text-xl leading-snug text-neutral-100 sm:text-[22px]">
+          {thesis.lead}
+        </p>
+        <p className="mt-1.5 text-sm leading-relaxed text-neutral-400">
+          {thesis.line}
+        </p>
+      </div>
+
+      {/* 4 · The quiet columns — kept honest, kept subdued. */}
+      <div className="relative grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <div>
+          <h3 className="mb-3 text-[11px] uppercase tracking-[0.2em] text-neutral-500">
             What you did well
           </h3>
           {debrief.strengths.length === 0 ? (
-            <p className="text-sm leading-relaxed text-neutral-400">
+            <p className="text-sm leading-relaxed text-neutral-500">
               The record offers little to praise tonight — the lesson below is
               where this night's value lives.
             </p>
           ) : (
-            <ul className="flex flex-col gap-2 text-sm leading-relaxed text-neutral-200">
+            <ul className="flex flex-col gap-2.5 text-sm leading-relaxed text-neutral-300">
               {debrief.strengths.map((s, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="shrink-0 text-emerald-500">✓</span>
+                <li key={i} className="flex gap-2.5">
+                  <span className="mt-0.5 shrink-0 text-emerald-500/80">✓</span>
                   <span>{s}</span>
                 </li>
               ))}
             </ul>
           )}
         </div>
-        <div className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-4">
-          <h3 className="text-xs uppercase tracking-wider text-amber-400/90 mb-2.5">
+        <div>
+          <h3 className="mb-3 text-[11px] uppercase tracking-[0.2em] text-neutral-500">
             What the night cost
           </h3>
           {debrief.misses.length === 0 ? (
-            <p className="text-sm leading-relaxed text-neutral-400">
+            <p className="text-sm leading-relaxed text-neutral-500">
               Nothing consequential — a clean night.
             </p>
           ) : (
-            <ul className="flex flex-col gap-2 text-sm leading-relaxed text-neutral-200">
+            <ul className="flex flex-col gap-2.5 text-sm leading-relaxed text-neutral-300">
               {debrief.misses.map((m, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="shrink-0 text-amber-500">!</span>
+                <li key={i} className="flex gap-2.5">
+                  <span className="mt-0.5 shrink-0 text-ember-400/80">•</span>
                   <span>{m}</span>
                 </li>
               ))}
@@ -1110,29 +1630,26 @@ function DebriefPanel({
         </div>
       </div>
 
-      <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-4">
-        <h3 className="text-xs uppercase tracking-wider text-neutral-500 mb-2">
-          The lesson
+      {/* 5 · THE OTHER PLAYBOOK — the thesis this sim exists to teach. The most
+          typographic care: the attending's lesson, then the world that had a CT. */}
+      <div className="relative rounded-xl border border-neutral-800 bg-neutral-950/50 p-5 sm:p-6">
+        <h3 className="mb-3 text-[11px] uppercase tracking-[0.2em] text-ember-400/70">
+          The lesson — and the other playbook
         </h3>
-        <p className="text-sm leading-relaxed text-neutral-200">
+        <p className="font-vignette text-lg leading-relaxed text-neutral-200 sm:text-xl">
           {debrief.resourceLesson}
         </p>
-      </div>
-
-      <div className="rounded-lg border border-sky-900/60 bg-sky-950/20 p-4">
-        <h3 className="text-xs uppercase tracking-wider text-sky-400/90 mb-2">
-          If this hospital had everything — the other playbook
-        </h3>
-        <p className="text-sm leading-relaxed text-neutral-300 italic">
+        <p className="mt-4 border-l-2 border-ember-500/30 pl-4 font-vignette text-[15px] italic leading-relaxed text-neutral-400 sm:text-base">
           {debrief.ctContrast}
         </p>
       </div>
 
-      <details>
-        <summary className="cursor-pointer select-none text-xs uppercase tracking-wider text-neutral-500 transition hover:text-neutral-300">
+      {/* Honesty: the full line-by-line arithmetic, one tap away. */}
+      <details className="relative">
+        <summary className="cursor-pointer select-none text-[11px] uppercase tracking-[0.2em] text-neutral-500 transition hover:text-neutral-300">
           How the score was computed
         </summary>
-        <div className="mt-3 flex flex-col gap-3">
+        <div className="mt-4 flex flex-col gap-3">
           {debrief.axes.map((axis) => (
             <div key={axis.key}>
               <div className="flex items-baseline justify-between gap-3 text-sm text-neutral-300">
@@ -1151,7 +1668,7 @@ function DebriefPanel({
         </div>
       </details>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="relative flex flex-wrap items-center gap-3">
         <button
           onClick={onRestart}
           className="rounded-lg bg-neutral-100 px-5 py-2 text-sm font-medium text-neutral-900 transition hover:bg-white"
@@ -1169,25 +1686,88 @@ function DebriefPanel({
   );
 }
 
+// One score axis as a labeled bar — the arithmetic made legible without
+// opening the details. The fill grows from the left on mount (motion-safe).
+function AxisBar({ axis }: { axis: DebriefAxis }) {
+  const frac =
+    axis.max > 0 ? Math.max(0, Math.min(axis.earned / axis.max, 1)) : 0;
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-3">
+        <span className="text-sm text-neutral-300">{axis.label}</span>
+        <span className="text-sm tabular-nums text-neutral-400">
+          {axis.earned}
+          <span className="text-neutral-600">/{axis.max}</span>
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-800">
+        <div
+          className="h-full origin-left rounded-full bg-ember-400 motion-safe:animate-bar-grow"
+          style={{ width: `${frac * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function ScoreGauge({ score }: { score: number }) {
-  const r = 52;
+  const r = 54;
   const circumference = 2 * Math.PI * r;
-  const frac = Math.max(0, Math.min(score, 100)) / 100;
+  const target = Math.max(0, Math.min(score, 100));
+  const frac = target / 100;
   const tone =
-    score >= 80
+    target >= 80
       ? "text-emerald-400"
-      : score >= 55
+      : target >= 55
         ? "text-amber-400"
         : "text-red-400";
+
+  // Start at the final state under reduced motion (no flash); otherwise start
+  // empty and animate: the ring sweeps to the score, the number counts up.
+  const [display, setDisplay] = useState(() =>
+    prefersReducedMotion() ? target : 0,
+  );
+  const [offset, setOffset] = useState(() =>
+    circumference * (prefersReducedMotion() ? 1 - frac : 1),
+  );
+
+  useEffect(() => {
+    if (prefersReducedMotion()) {
+      setDisplay(target);
+      setOffset(circumference * (1 - frac));
+      return;
+    }
+    // Sweep the ring one frame later so the transition has a from-state.
+    const rafSweep = requestAnimationFrame(() =>
+      setOffset(circumference * (1 - frac)),
+    );
+    // Count the number up in step with the sweep.
+    const start = performance.now();
+    const dur = 950;
+    let rafCount = 0;
+    const step = (now: number) => {
+      const p = Math.min((now - start) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setDisplay(Math.round(eased * target));
+      if (p < 1) rafCount = requestAnimationFrame(step);
+    };
+    rafCount = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(rafSweep);
+      cancelAnimationFrame(rafCount);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
   return (
-    <div className="relative h-32 w-32 shrink-0">
+    <div className="relative h-40 w-40 shrink-0">
       <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
         <circle
           cx="60"
           cy="60"
           r={r}
           fill="none"
-          strokeWidth="10"
+          strokeWidth="9"
           className="stroke-neutral-800"
         />
         <circle
@@ -1195,18 +1775,19 @@ function ScoreGauge({ score }: { score: number }) {
           cy="60"
           r={r}
           fill="none"
-          strokeWidth="10"
+          strokeWidth="9"
           strokeLinecap="round"
           stroke="currentColor"
-          strokeDasharray={`${circumference * frac} ${circumference}`}
-          className={tone}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className={`${tone} transition-[stroke-dashoffset] duration-[1100ms] ease-out`}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className={`text-3xl font-semibold tabular-nums ${tone}`}>
-          {score}
+        <span className={`text-4xl font-semibold tabular-nums ${tone}`}>
+          {display}
         </span>
-        <span className="text-[10px] uppercase tracking-wider text-neutral-500">
+        <span className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">
           / 100
         </span>
       </div>
@@ -1214,42 +1795,74 @@ function ScoreGauge({ score }: { score: number }) {
   );
 }
 
+// The scarcity ledger: two opposed zones. What's IN THE ROOM (lit, present)
+// against what's BEHIND LOCKED DOORS (struck out, each with its authored
+// reason). This is the board the whole hidden sim is engineered on — copy and
+// layout only; availability is never a live toggle.
 function ConstraintBoard({ board }: { board: PublicCase["constraintBoard"] }) {
-  const dot: Record<string, string> = {
-    available: "bg-emerald-500",
-    delayed: "bg-amber-400",
-    unavailable: "bg-red-500",
-  };
+  const here = board.filter((i) => i.status === "available");
+  const gone = board.filter((i) => i.status !== "available");
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-5">
-      <h3 className="text-xs uppercase tracking-wider text-neutral-500 mb-3">
+      <h3 className="mb-4 text-[11px] uppercase tracking-[0.2em] text-neutral-500">
         What this hospital has tonight
       </h3>
-      <ul className="flex flex-col gap-2.5">
-        {board.map((item) => (
-          <li key={item.key} className="flex items-start gap-2.5 text-sm">
-            <span
-              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot[item.status]}`}
-            />
-            <div className="leading-snug">
-              <span
-                className={
-                  item.status === "unavailable"
-                    ? "text-neutral-500"
-                    : "text-neutral-200"
-                }
+
+      {here.length > 0 && (
+        <div className="mb-5">
+          <p className="mb-2.5 text-[10px] uppercase tracking-[0.2em] text-emerald-500/70">
+            In the room
+          </p>
+          <ul className="flex flex-col gap-2">
+            {here.map((item) => (
+              <li
+                key={item.key}
+                className="flex items-center gap-2.5 text-sm text-neutral-200"
               >
+                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
                 {item.label}
-              </span>
-              {item.status !== "available" && (
-                <span className="block text-[11px] text-neutral-500">
-                  {item.detail}
-                </span>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {gone.length > 0 && (
+        <div>
+          <p className="mb-2.5 text-[10px] uppercase tracking-[0.2em] text-neutral-600">
+            Behind locked doors
+          </p>
+          <ul className="flex flex-col gap-2.5">
+            {gone.map((item) => {
+              const locked = item.status === "unavailable";
+              return (
+                <li key={item.key} className="flex items-start gap-2.5">
+                  <span
+                    aria-hidden
+                    className="mt-px shrink-0 text-neutral-600"
+                  >
+                    {locked ? "⊘" : "◷"}
+                  </span>
+                  <div className="leading-snug">
+                    <span
+                      className={
+                        locked
+                          ? "text-sm text-neutral-500 line-through decoration-neutral-700"
+                          : "text-sm text-neutral-400"
+                      }
+                    >
+                      {item.label}
+                    </span>
+                    <span className="block text-[11px] leading-snug text-neutral-500">
+                      {item.detail}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

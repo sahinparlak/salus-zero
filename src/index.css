@@ -1,1 +1,145 @@
 @import "tailwindcss";
+
+/* ── Newsreader — the mother's voice, the editorial narrative surfaces.
+   Self-hosted on purpose: NO CDN link, because the demo may run offline.
+   Latin subset only (the UI is English). The normal file is a variable slice
+   covering 400–600, so a single file serves every editorial weight. ── */
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("./fonts/newsreader-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/newsreader-latin-italic.woff2") format("woff2");
+}
+
+@theme {
+  /* ── Night: the ward at 02:00. ──────────────────────────────────────────
+     Override the neutral DARK end with a cold blue-slate cast so every
+     existing `neutral-{950,900,800,700}` surface/border becomes the room's
+     darkness with zero markup change. The panels are `bg-neutral-900/60`
+     (40% transparent), so the warm lamp below bleeds THROUGH the narrative
+     column and not the instrument edge — that transparency is load-bearing
+     for the warm-center / cold-periphery split. Text neutrals (100–600) are
+     left as-is to keep legibility. */
+  --color-neutral-950: oklch(0.155 0.018 255);
+  --color-neutral-900: oklch(0.205 0.020 255);
+  --color-neutral-800: oklch(0.275 0.020 255);
+  --color-neutral-700: oklch(0.375 0.018 255);
+
+  /* ── Sodium lamp: the one warm light in the building. ──────────────────
+     Reserved for the narrative/hero surfaces (vignette, debrief reveal,
+     the clock as antagonist) in the phases to come. */
+  --color-ember-300: oklch(0.86 0.090 72);
+  --color-ember-400: oklch(0.80 0.120 68);
+  --color-ember-500: oklch(0.73 0.150 62);
+
+  /* The editorial serif — the voice of the people in the room. */
+  --font-vignette: "Newsreader", ui-serif, Georgia, "Times New Roman", serif;
+
+  /* The lamp breathes. Opacity-only (GPU-cheap); gated with `motion-safe:`
+     in markup so a reduced-motion viewer gets a calm, still 02:00. */
+  --animate-lamp-breath: lampBreath 9s ease-in-out infinite;
+
+  /* Debrief reveal: the withheld truth surfaces out of the blur. One-shot on
+     mount; motion-safe so reduced-motion viewers just read it, sharp. */
+  --animate-reveal-in: revealIn 1100ms ease-out both;
+
+  /* Score axis bars grow from the left as the verdict settles. */
+  --animate-bar-grow: barGrow 800ms ease-out both;
+
+  /* The clock doesn't tick — it lurches. Each turn's spent minutes rise off
+     the clock as a "wound" and fade. */
+  --animate-wound: woundFlash 1600ms ease-out both;
+
+  /* "UNAVAILABLE HERE" comes down on the refused order like an ink stamp. */
+  --animate-stamp: stampIn 420ms cubic-bezier(0.2, 1.4, 0.5, 1) both;
+
+  /* A monitor value that changed this turn fades up — a brief "it moved". */
+  --animate-value-flash: valueFlash 800ms ease-out;
+
+  /* A critical channel alarms like a bedside monitor — a slow red blink. */
+  --animate-monitor-alarm: monitorAlarm 1150ms ease-in-out infinite;
+}
+
+@keyframes lampBreath {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+@keyframes revealIn {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes barGrow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes woundFlash {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.94);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-11px);
+  }
+}
+
+@keyframes stampIn {
+  from {
+    opacity: 0;
+    transform: rotate(-3deg) scale(1.5);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-3deg) scale(1);
+  }
+}
+
+@keyframes valueFlash {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes monitorAlarm {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
