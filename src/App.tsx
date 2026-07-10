@@ -968,15 +968,28 @@ function ColdOpen({
         {phase === "loading" ? "Opening the case…" : "Begin the night shift"}
       </button>
 
+      {/* The second door — the night you are already in. A quiet lamp burns
+          behind it: serif voice like the hook above, instrument small-caps
+          below, warm bloom on approach. It must invite without competing
+          with the training door's loud ember. */}
       <button
         onClick={onBringPatient}
-        className="group flex flex-col items-center gap-0.5 rounded-lg border border-neutral-800 bg-neutral-900/50 px-5 py-2.5 transition hover:border-ember-500/50 motion-safe:animate-reveal-in"
+        className="group relative flex flex-col items-center gap-1 overflow-hidden rounded-xl border border-ember-500/25 bg-neutral-900/40 px-7 py-3.5 transition hover:border-ember-500/60 hover:bg-neutral-900/70 motion-safe:animate-reveal-in"
         style={{ animationDelay: "2100ms" }}
       >
-        <span className="text-sm text-neutral-300 group-hover:text-neutral-100">
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-8 -top-6 h-10 rounded-full opacity-60 blur-xl transition group-hover:opacity-100 motion-safe:animate-lamp-breath"
+          style={{ background: "oklch(0.73 0.15 62 / 0.14)" }}
+        />
+        <span className="relative flex items-baseline gap-2 font-vignette text-[17px] text-neutral-200 transition group-hover:text-neutral-50">
+          <span
+            aria-hidden
+            className="h-1.5 w-1.5 self-center rounded-full bg-ember-400/90 motion-safe:animate-lamp-breath"
+          />
           …or bring the patient in front of you
         </span>
-        <span className="text-[11px] text-neutral-500 transition group-hover:text-ember-300/80">
+        <span className="relative text-[10px] uppercase tracking-[0.18em] text-neutral-500 transition group-hover:text-ember-300/90">
           Real patient · resource-aware decision support · prototype
         </span>
       </button>
@@ -2249,7 +2262,7 @@ function ConsultFlow({
                   setRole(r.role);
                   setStage("intake");
                 }}
-                className="rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-3 text-left transition hover:border-ember-500/50"
+                className="rounded-2xl border border-neutral-800/80 bg-neutral-900/60 px-5 py-3.5 text-left transition hover:border-ember-500/50 hover:bg-neutral-900/80"
               >
                 <span className="text-[15px] text-neutral-200">{r.role}</span>
                 {r.sub && (
@@ -2272,7 +2285,7 @@ function ConsultFlow({
           <div className="flex flex-col gap-2">
             <button
               onClick={() => setStage("student")}
-              className="rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-left transition hover:border-neutral-600"
+              className="rounded-2xl border border-neutral-800/80 bg-neutral-900/40 px-5 py-3.5 text-left transition hover:border-neutral-600 hover:bg-neutral-900/60"
             >
               <span className="text-[15px] text-neutral-300">
                 Medical student
@@ -2283,7 +2296,7 @@ function ConsultFlow({
             </button>
             <button
               onClick={() => setStage("family")}
-              className="rounded-xl border border-dashed border-neutral-800 bg-neutral-900/30 px-4 py-3 text-left transition hover:border-amber-600/60"
+              className="rounded-2xl border border-dashed border-neutral-800 bg-neutral-900/30 px-5 py-3.5 text-left transition hover:border-amber-600/60 hover:bg-neutral-900/50"
             >
               <span className="text-[15px] text-neutral-300">
                 I'm here about my own child
@@ -2674,7 +2687,7 @@ function ConsultFlow({
             </p>
           )}
 
-          <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-xs leading-relaxed text-amber-200/90">
+          <div className="rounded-xl border border-amber-700/50 bg-amber-950/30 px-3.5 py-2 text-xs leading-relaxed text-amber-200/90">
             <span className="font-semibold">
               Prototype — not a validated medical device.
             </span>{" "}
@@ -2687,7 +2700,7 @@ function ConsultFlow({
               is told NOT to re-narrate the intake, so replies stay short. */}
           <details
             open
-            className="rounded-lg border border-neutral-800 bg-neutral-900/50 px-3 py-2 text-xs leading-relaxed"
+            className="rounded-xl border border-neutral-800/80 bg-neutral-900/50 px-3.5 py-2 text-xs leading-relaxed"
           >
             <summary className="cursor-pointer select-none text-[11px] uppercase tracking-wider text-neutral-500">
               Anamnesis — what you entered
@@ -2722,13 +2735,13 @@ function ConsultFlow({
 
           <div
             ref={chatRef}
-            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-2 pr-1"
+            className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto py-3 pr-1"
           >
             {messages.map((m, i) => (
               <div key={i}>
                 {m.role === "clinician" ? (
-                  <div className="ml-8 rounded-lg border border-neutral-700/70 bg-neutral-800/50 px-4 py-2.5">
-                    <div className="mb-1 text-[11px] uppercase tracking-wider text-neutral-500">
+                  <div className="ml-10 rounded-2xl bg-neutral-800/40 px-4 py-3">
+                    <div className="mb-1 text-[10px] uppercase tracking-[0.15em] text-neutral-500">
                       You
                     </div>
                     <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-neutral-200">
@@ -2744,7 +2757,7 @@ function ConsultFlow({
                       </p>
                     ) : (
                       <div>
-                        <ConsultProse text={m.text} />
+                        <ConsultProse text={m.text} transfer={transferLabel} />
                         {cPhase === "streaming" && i === messages.length - 1 && (
                           <span
                             aria-hidden
@@ -2774,28 +2787,36 @@ function ConsultFlow({
             </p>
           )}
 
-          <div className="flex gap-2 pb-2">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  if (cPhase === "ready" && input.trim()) void sendConsult();
-                }
-              }}
-              rows={2}
-              disabled={cPhase !== "ready"}
-              placeholder={`Ask a follow-up about ${ptName.trim() || "the patient"}… (Enter to send)`}
-              className="flex-1 resize-none rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-[15px] leading-relaxed placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none disabled:opacity-50"
-            />
-            <button
-              onClick={() => void sendConsult()}
-              disabled={cPhase !== "ready" || !input.trim()}
-              className="self-stretch rounded-lg bg-neutral-100 px-4 text-sm font-medium text-neutral-900 transition hover:bg-white disabled:opacity-40"
-            >
-              Send
-            </button>
+          {/* The consult bench: one floating pill, ember-armed send — the
+              modern-airiness pass. Same handlers, same disabled logic. */}
+          <div className="pb-3">
+            <div className="flex items-end gap-1.5 rounded-3xl border border-neutral-700/50 bg-neutral-900/80 py-2 pl-4 pr-2 shadow-lg shadow-black/40 backdrop-blur transition focus-within:border-neutral-500/70">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (cPhase === "ready" && input.trim()) void sendConsult();
+                  }
+                }}
+                rows={2}
+                disabled={cPhase !== "ready"}
+                placeholder={`Ask a follow-up about ${ptName.trim() || "the patient"}…`}
+                className="flex-1 resize-none bg-transparent py-1 text-[15px] leading-relaxed placeholder:text-neutral-600 focus:outline-none disabled:opacity-50"
+              />
+              <button
+                onClick={() => void sendConsult()}
+                disabled={cPhase !== "ready" || !input.trim()}
+                aria-label="Send"
+                title="Send (Enter)"
+                className="grid h-9 w-9 flex-none place-items-center self-end rounded-full bg-ember-400 text-neutral-950 transition hover:bg-ember-300 disabled:opacity-40"
+              >
+                <span aria-hidden className="text-lg leading-none">
+                  ↑
+                </span>
+              </button>
+            </div>
           </div>
         </section>
       )}
@@ -2825,6 +2846,10 @@ interface ProseSection {
 
 const MOVE_LINE_RE = /^\*{0,2}\((i{1,3}|iv|vi?)\)\*{0,2}\s*(.*)$/;
 const SCORE_LINE_RE = /\b(PAS|Alvarado)\b[^\n]*?=?\s*\*{0,2}(\d{1,2})\s*\/\s*10/i;
+// The model sometimes writes the total before the name ("= 8/10 PAS") —
+// accept that order too rather than burdening the format contract further.
+const SCORE_LINE_REV_RE =
+  /\*{0,2}(\d{1,2})\s*\/\s*10\s*\*{0,2}[^\n]*?\b(PAS|Alvarado)\b/i;
 
 function parseConsultProse(text: string): ProseSection[] {
   const sections: ProseSection[] = [{ blocks: [], scores: [] }];
@@ -2862,11 +2887,15 @@ function parseConsultProse(text: string): ProseSection[] {
     }
 
     // A score total stated on this line feeds the section's meter
-    // (last statement of a given score wins).
+    // (last statement of a given score wins). Name-first order preferred,
+    // total-first ("= 8/10 PAS") accepted.
     const sc = SCORE_LINE_RE.exec(line);
-    if (sc) {
-      const name = sc[1].toUpperCase() === "PAS" ? "PAS" : "Alvarado";
-      const value = parseInt(sc[2], 10);
+    const rv = sc ? null : SCORE_LINE_REV_RE.exec(line);
+    const rawName = sc ? sc[1] : rv ? rv[2] : null;
+    const rawValue = sc ? sc[2] : rv ? rv[1] : null;
+    if (rawName && rawValue) {
+      const name = rawName.toUpperCase() === "PAS" ? "PAS" : "Alvarado";
+      const value = parseInt(rawValue, 10);
       if (value <= 10) {
         const scores = cur().scores.filter((s) => s.name !== name);
         scores.push({ name, value });
@@ -2878,12 +2907,18 @@ function parseConsultProse(text: string): ProseSection[] {
 }
 
 // **bold** → styled emphasis; an unclosed ** while streaming stays plain.
-function inlineBold(t: string) {
+// The "ember" tone is scoped to the (vi) referral card only — warm emphasis
+// carries decision-weight there and must not be generalized elsewhere.
+function inlineBold(t: string, tone: "cold" | "ember" = "cold") {
   const parts = t.split("**");
   const closed = parts.length % 2 === 1;
+  const strongCls =
+    tone === "ember"
+      ? "font-semibold text-ember-300"
+      : "font-semibold text-neutral-100";
   return parts.map((p, i) =>
     i % 2 === 1 && (closed || i < parts.length - 1) ? (
-      <strong key={i} className="font-semibold text-neutral-100">
+      <strong key={i} className={strongCls}>
         {p}
       </strong>
     ) : (
@@ -2893,7 +2928,11 @@ function inlineBold(t: string) {
 }
 
 // Low is deliberately NEUTRAL, never green — a low score must not read as
-// reassurance (the false-relief lesson). Equivocal amber, high red.
+// reassurance (the false-relief lesson). Equivocal amber, high red. The band
+// thresholds live HERE and nowhere else. The meter powers on like the hero
+// monitor: cold track first, band-colored fill sweeping segment by segment,
+// the total as a glowing mono number — except low, which stays cold, unlit,
+// and unrewarding.
 function ScoreMeter({ name, value }: { name: string; value: number }) {
   const v = Math.max(0, Math.min(10, value));
   const high = v >= 7;
@@ -2904,29 +2943,226 @@ function ScoreMeter({ name, value }: { name: string; value: number }) {
       ? "border-amber-400 bg-amber-400/80"
       : "border-neutral-400 bg-neutral-400/70";
   const band = high ? "high" : mid ? "equivocal" : "low";
+  const bandColor = high
+    ? "oklch(0.70 0.20 25)"
+    : mid
+      ? "oklch(0.83 0.16 75)"
+      : "oklch(0.78 0.02 255)";
+  const bandWord = high
+    ? "text-red-300"
+    : mid
+      ? "text-amber-300"
+      : "text-neutral-400";
   return (
-    <div className="my-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-      <span className="w-16 text-[11px] uppercase tracking-wider text-neutral-500">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span className="w-16 font-mono text-[10px] uppercase tracking-[0.15em] text-neutral-500">
         {name}
       </span>
       <span className="flex gap-[3px]" aria-hidden>
         {Array.from({ length: 10 }, (_, i) => (
           <span
             key={i}
-            className={`h-2.5 w-3 rounded-[2px] border ${
-              i < v ? fill : "border-neutral-700"
-            }`}
-          />
+            className="relative h-2.5 w-3 rounded-[2px] border border-neutral-700"
+          >
+            {i < v && (
+              <span
+                className={`absolute -inset-px rounded-[2px] border ${fill} origin-left motion-safe:animate-bar-grow`}
+                style={{ animationDelay: `${i * 45}ms` }}
+              />
+            )}
+          </span>
         ))}
       </span>
-      <span className="text-[12px] tabular-nums text-neutral-300">
-        {v}/10 · {band}
+      <span
+        aria-hidden
+        className="font-mono text-lg font-semibold tabular-nums motion-safe:animate-value-flash"
+        style={{
+          color: bandColor,
+          filter:
+            band !== "low" ? `drop-shadow(0 0 6px ${bandColor})` : "none",
+        }}
+      >
+        {v}/10
       </span>
+      <span
+        aria-hidden
+        className={`text-[10px] uppercase tracking-wider ${bandWord}`}
+      >
+        {band}
+      </span>
+      <span className="sr-only">{`${name} score ${v} of 10, ${band}`}</span>
     </div>
   );
 }
 
-function ConsultProse({ text }: { text: string }) {
+// The consult speaks in two registers (the hero's warm-narrative/cold-
+// instrument split, applied to typography): (i), (vi), and any unnumbered
+// section are the VOICE — Newsreader serif under an ember-crowned header;
+// (ii)–(v) are INSTRUMENTS — cold sans/mono panels that assemble as the
+// stream lands. Drifted or contract-free output carries no section numbers,
+// so it renders entirely as voice — degradation by construction.
+const VOICE_SECTIONS = new Set(["i", "vi"]);
+const MIMIC_AXIOM_RE = /ruling one out does not rule out/i;
+const CONFIRM_RE = /^confirm:\s*(.+)/i;
+
+// Split "Name — distinguisher" at the first " — ", unless the split would
+// leave an odd number of ** on either side (a bold span crossing the
+// separator would render as stray asterisks).
+function splitMimic(t: string): [string, string | null] {
+  const idx = t.indexOf(" — ");
+  if (idx === -1) return [t, null];
+  const name = t.slice(0, idx);
+  const rest = t.slice(idx + 3);
+  const odd = (s: string) => (s.split("**").length - 1) % 2 === 1;
+  if (odd(name) || odd(rest)) return [t, null];
+  return [name, rest];
+}
+
+// The (iii) differential as a "not yet excluded" board — the anti-anchoring
+// thesis made visible. Rows render in ORIGINAL block order (regrouping would
+// misrepresent the wire). Glyphs NEVER change state client-side: only a later
+// model turn can close a mimic; the count chip stays hidden until the first
+// mimic row exists so a mid-stream board never flashes a reassuring zero.
+function MimicBoard({ sec }: { sec: ProseSection }) {
+  const isMimicRow = (b: ProseBlock) =>
+    b.kind === "bullet" && !MIMIC_AXIOM_RE.test(b.text);
+  const count = sec.blocks.filter(isMimicRow).length;
+  return (
+    <div className="rounded-xl border border-amber-500/25 bg-neutral-900/40 p-3.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-[11px] text-neutral-600">
+            ({sec.num})
+          </span>
+          <span className="text-[11.5px] font-semibold uppercase tracking-wider text-amber-300/90">
+            {sec.title}
+          </span>
+        </div>
+        {count > 0 && (
+          <span className="text-[10px] uppercase tracking-[0.2em] text-amber-400/80">
+            {count} not excluded
+          </span>
+        )}
+      </div>
+      <div className="mt-1 flex flex-col divide-y divide-neutral-800/60">
+        {sec.blocks.map((b, bi) => {
+          if (isMimicRow(b)) {
+            const [name, rest] = splitMimic(b.text);
+            return (
+              <div
+                key={bi}
+                className="grid grid-cols-[auto_1fr] gap-2.5 py-2 motion-safe:animate-reveal-in"
+              >
+                <span aria-hidden className="mt-px text-[13px] text-amber-400">
+                  ◌
+                </span>
+                <span>
+                  <span className="sr-only">not yet excluded: </span>
+                  <span className="text-sm font-semibold text-neutral-100">
+                    {inlineBold(name)}
+                  </span>
+                  {rest !== null && (
+                    <span className="block text-[12px] leading-snug text-neutral-500">
+                      {inlineBold(rest)}
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          }
+          const axiom = MIMIC_AXIOM_RE.test(b.text);
+          return (
+            <p
+              key={bi}
+              className={
+                axiom
+                  ? "my-1 border-l-2 border-ember-500/30 py-1.5 pl-3 font-vignette text-[14.5px] italic leading-relaxed text-ember-300/90"
+                  : "py-1.5 text-[14px] leading-relaxed text-neutral-300"
+              }
+            >
+              {b.kind === "step" ? `${b.n}. ` : ""}
+              {inlineBold(b.text)}
+            </p>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// The (vi) referral counsel as the consult's dawn ceremony — a warm decision
+// card carrying the clinician's own transfer time as a cold chip. The dawn
+// wash stays at 0.12 alpha, never brighter: a stronger dawn over an equivocal
+// referral would read as relief.
+function ReferralCard({
+  sec,
+  transfer,
+}: {
+  sec: ProseSection;
+  transfer?: string;
+}) {
+  return (
+    <div className="relative mt-2 overflow-hidden rounded-xl border border-ember-500/25 bg-neutral-900/60 p-4 motion-safe:animate-reveal-in">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-24"
+        style={{
+          background:
+            "linear-gradient(to bottom, oklch(0.73 0.15 62 / 0.12), transparent)",
+        }}
+      />
+      <div className="relative flex flex-col gap-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ember-400/80">
+            {sec.title || "The referral question"}
+          </span>
+          <span className="rounded border border-neutral-800 bg-neutral-950/60 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-neutral-400">
+            transfer · {transfer || "not given"}
+          </span>
+        </div>
+        {sec.scores.map((s) => (
+          <ScoreMeter key={`${s.name}-${s.value}`} name={s.name} value={s.value} />
+        ))}
+        {sec.blocks.map((b, bi) => {
+          const closer = /verify, you decide/i.test(b.text);
+          if (b.kind === "bullet")
+            return (
+              <div
+                key={bi}
+                className="flex gap-2 font-vignette text-[15px] leading-relaxed text-neutral-100"
+              >
+                <span aria-hidden className="mt-[1px] text-ember-500/70">
+                  •
+                </span>
+                <span>{inlineBold(b.text, "ember")}</span>
+              </div>
+            );
+          return (
+            <p
+              key={bi}
+              className={
+                closer
+                  ? "font-vignette text-[15px] italic leading-relaxed text-ember-300/90"
+                  : "font-vignette text-[16px] leading-snug text-neutral-100"
+              }
+            >
+              {b.kind === "step" ? `${b.n}. ` : ""}
+              {inlineBold(b.text, "ember")}
+            </p>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ConsultProse({
+  text,
+  transfer,
+}: {
+  text: string;
+  transfer?: string;
+}) {
   const sections = parseConsultProse(text);
   // Tick-off worklist state — per message, ephemeral like everything else.
   const [ticked, setTicked] = useState<Set<string>>(new Set());
@@ -2939,39 +3175,128 @@ function ConsultProse({ text }: { text: string }) {
     });
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className="flex flex-col gap-4">
       {sections.map((sec, si) => {
-        const accent =
-          sec.num === "iii"
-            ? "border-l-2 border-amber-500/50 pl-3"
-            : sec.num === "iv"
-              ? "border-l-2 border-red-500/60 pl-3"
-              : "";
+        if (sec.num === "iii") return <MimicBoard key={si} sec={sec} />;
+        if (sec.num === "vi")
+          return <ReferralCard key={si} sec={sec} transfer={transfer} />;
+
+        const isVoice = !sec.num || VOICE_SECTIONS.has(sec.num);
+        const isAlarm = sec.num === "iv";
         return (
-          <div key={si} className={`flex flex-col gap-1.5 ${accent}`}>
+          <div
+            key={si}
+            className={`flex flex-col gap-1.5 ${
+              isAlarm
+                ? "rounded-lg border border-red-900/50 bg-red-950/15 p-3"
+                : isVoice && sec.num
+                  ? "mt-1.5"
+                  : ""
+            }`}
+          >
             {sec.num && (
               <div className="flex items-baseline gap-2">
                 <span className="font-mono text-[11px] text-neutral-600">
                   ({sec.num})
                 </span>
-                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-neutral-400">
+                <span
+                  className={
+                    isAlarm
+                      ? "text-[11.5px] font-semibold uppercase tracking-wider text-red-300"
+                      : isVoice
+                        ? "text-[11px] font-semibold uppercase tracking-[0.2em] text-ember-400/70"
+                        : "text-[11.5px] font-semibold uppercase tracking-wider text-neutral-400"
+                  }
+                >
+                  {isAlarm && (
+                    <span
+                      aria-hidden
+                      className="mr-1.5 text-[11px] text-red-400"
+                    >
+                      ⚠
+                    </span>
+                  )}
                   {sec.title}
+                  {isAlarm && (
+                    <span className="sr-only"> — red flags, can't-miss</span>
+                  )}
                 </span>
               </div>
             )}
-            {sec.scores.map((s) => (
-              <ScoreMeter key={s.name} name={s.name} value={s.value} />
-            ))}
+            {sec.scores.length > 0 && (
+              <div
+                className="my-1 rounded-lg border border-neutral-800 px-3 py-2"
+                style={{
+                  backgroundColor: "oklch(0.145 0.02 255)",
+                  backgroundImage:
+                    "linear-gradient(oklch(1 0 0 / 0.028) 1px, transparent 1px), linear-gradient(90deg, oklch(1 0 0 / 0.028) 1px, transparent 1px)",
+                  backgroundSize: "22px 22px",
+                }}
+              >
+                <div className="flex flex-col gap-1.5">
+                  {sec.scores.map((s) => (
+                    <ScoreMeter
+                      key={`${s.name}-${s.value}`}
+                      name={s.name}
+                      value={s.value}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             {sec.blocks.map((b, bi) => {
+              // The intake-inconsistency flag, stamped. Scoped to (i) and
+              // unnumbered sections (a follow-up-turn catch stamps too); the
+              // regex demands a colon AND non-empty text after it, so routine
+              // "Confirm, doctor…" prose and a half-streamed prefix stay
+              // ordinary paragraphs.
+              const confirm =
+                b.kind !== "step" && (sec.num === "i" || !sec.num)
+                  ? CONFIRM_RE.exec(b.text)
+                  : null;
+              if (confirm) {
+                return (
+                  <div
+                    key={bi}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1"
+                  >
+                    <span className="inline-block -rotate-3 rounded border border-amber-500/70 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-amber-300 motion-safe:animate-stamp">
+                      Check intake
+                    </span>
+                    <span className="sr-only">
+                      possible intake inconsistency:
+                    </span>
+                    <span className="text-[14px] leading-relaxed text-amber-200/90">
+                      {inlineBold(confirm[1])}
+                    </span>
+                  </div>
+                );
+              }
               if (b.kind === "bullet")
                 return (
                   <div
                     key={bi}
-                    className="flex gap-2 text-[14.5px] leading-relaxed text-neutral-300"
+                    className={`flex gap-2.5 leading-relaxed ${
+                      isAlarm
+                        ? "text-[14.5px] text-neutral-200"
+                        : "text-[14.5px] text-neutral-300"
+                    }`}
                   >
-                    <span aria-hidden className="mt-[1px] text-neutral-600">
-                      •
-                    </span>
+                    {isAlarm ? (
+                      <>
+                        <span
+                          aria-hidden
+                          className="mt-[1px] text-red-400/80"
+                        >
+                          ⚠
+                        </span>
+                        <span className="sr-only">red flag: </span>
+                      </>
+                    ) : (
+                      <span aria-hidden className="mt-[1px] text-neutral-600">
+                        •
+                      </span>
+                    )}
                     <span>{inlineBold(b.text)}</span>
                   </div>
                 );
@@ -3005,13 +3330,22 @@ function ConsultProse({ text }: { text: string }) {
                 );
               }
               const closer = /verify, you decide/i.test(b.text);
+              if (closer)
+                return (
+                  <p
+                    key={bi}
+                    className="font-vignette text-[15px] italic leading-relaxed text-ember-300/90"
+                  >
+                    {inlineBold(b.text)}
+                  </p>
+                );
               return (
                 <p
                   key={bi}
                   className={
-                    closer
-                      ? "font-vignette text-[15px] italic leading-relaxed text-ember-300/90"
-                      : "font-vignette text-[15.5px] leading-relaxed text-neutral-200"
+                    isVoice
+                      ? "font-vignette text-[15.5px] leading-relaxed text-neutral-200"
+                      : "text-[14px] leading-relaxed text-neutral-300"
                   }
                 >
                   {inlineBold(b.text)}
