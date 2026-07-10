@@ -205,6 +205,11 @@ export default function App() {
   const [showReferralConfirm, setShowReferralConfirm] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  // ── Section 2 (consult companion) — the ONLY App-level state it owns. All
+  // consult data lives inside <ConsultFlow/> and dies with it on unmount:
+  // PHI is ephemeral by construction, nothing consult ever touches
+  // localStorage or the sim state above.
+  const [consultOpen, setConsultOpen] = useState(false);
 
   // Restore a persisted session once on load — a refresh (or a judge's
   // accidental swipe) must not erase the night. Settled states only.
@@ -586,7 +591,22 @@ export default function App() {
     <div className="relative min-h-screen text-neutral-100 flex flex-col">
       <NightField />
       {!caseData ? (
-        <ColdOpen phase={phase} error={error} onBegin={beginCase} />
+        consultOpen ? (
+          <ConsultFlow
+            onExit={() => setConsultOpen(false)}
+            onStartSim={() => {
+              setConsultOpen(false);
+              void beginCase();
+            }}
+          />
+        ) : (
+          <ColdOpen
+            phase={phase}
+            error={error}
+            onBegin={beginCase}
+            onBringPatient={() => setConsultOpen(true)}
+          />
+        )
       ) : (
       <>
       <div className="w-full border-b border-neutral-800/60 px-4 py-1.5 text-center text-[11px] tracking-wide text-neutral-500">
@@ -905,10 +925,12 @@ function ColdOpen({
   phase,
   error,
   onBegin,
+  onBringPatient,
 }: {
   phase: "idle" | "loading" | "streaming" | "ready";
   error: string | null;
   onBegin: () => void;
+  onBringPatient: () => void;
 }) {
   return (
     <main className="relative flex min-h-[100svh] flex-col items-center justify-center gap-10 px-6 py-16 text-center">
@@ -944,6 +966,19 @@ function ColdOpen({
         style={{ animationDelay: "1700ms" }}
       >
         {phase === "loading" ? "Opening the case…" : "Begin the night shift"}
+      </button>
+
+      <button
+        onClick={onBringPatient}
+        className="group flex flex-col items-center gap-0.5 rounded-lg border border-neutral-800 bg-neutral-900/50 px-5 py-2.5 transition hover:border-ember-500/50 motion-safe:animate-reveal-in"
+        style={{ animationDelay: "2100ms" }}
+      >
+        <span className="text-sm text-neutral-300 group-hover:text-neutral-100">
+          …or bring the patient in front of you
+        </span>
+        <span className="text-[11px] text-neutral-500 transition group-hover:text-ember-300/80">
+          Real patient · resource-aware decision support · prototype
+        </span>
       </button>
 
       {error && (
@@ -1864,5 +1899,865 @@ function ConstraintBoard({ board }: { board: PublicCase["constraintBoard"] }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ═══════════════════════ SECTION 2 — THE CONSULT COMPANION ══════════════════
+// The second door on the same night: a health worker with a REAL child in
+// front of them. Everything below is additive and self-contained — it never
+// touches caseData/sim/localStorage, so the proven simulator cannot be
+// destabilized from here. Delete this block and the hero is unchanged.
+//
+// PHI is ephemeral BY CONSTRUCTION: the patient intake and the conversation
+// live only in this component's React state; leaving the flow (or a refresh)
+// erases them. Nothing consult-related is ever persisted anywhere.
+
+interface ConsultMessage {
+  role: "clinician" | "companion";
+  text: string;
+  // Post-stream dose-regex backstop tripped on this reply (a FLAG shown to
+  // the clinician, never a guarantee — the prompt rails are primary).
+  doseFlag?: boolean;
+}
+
+// PAS-mapped history items (plan §4): the picture arrives score-ready without
+// the clinician needing to know a score exists.
+const COMPLAINT_CHIPS = [
+  "Abdominal pain",
+  "Pain migrated to RLQ",
+  "Anorexia / won't eat",
+  "Nausea / vomiting",
+  "Fever ≥ 38 °C",
+  "Pain worse with cough or movement",
+];
+
+const EXAM_CHIPS = [
+  "RLQ tenderness",
+  "Rebound tenderness",
+  "Percussion tenderness",
+  "Pain on hopping / cough",
+  "Voluntary guarding",
+  "Involuntary guarding / rigidity",
+  "Abdomen soft / benign",
+  "Distension",
+  "Reduced or absent bowel sounds",
+  "Toxic appearance",
+];
+
+// Pre-checked to the typical rural district hospital (confirm-don't-compose):
+// the clinician touches only the exceptions.
+const RESOURCE_ITEMS: { label: string; rural: boolean }[] = [
+  { label: "CT scanner", rural: false },
+  { label: "Ultrasound", rural: false },
+  { label: "Plain X-ray", rural: true },
+  { label: "Labs / CBC", rural: true },
+  { label: "Urine dip", rural: true },
+  { label: "Bedside glucose + ketones", rural: true },
+  { label: "Surgeon on site", rural: false },
+  { label: "PICU", rural: false },
+  { label: "Blood bank", rural: false },
+  { label: "IV fluids / antibiotics", rural: true },
+];
+
+const TRANSFER_CHOICES: { key: string; label: string; min: number | null }[] = [
+  { key: "45", label: "< 1 h", min: 45 },
+  { key: "90", label: "1–2 h", min: 90 },
+  { key: "180", label: "2–4 h", min: 180 },
+  { key: "240", label: "~4 h", min: 240 },
+  { key: "360", label: "> 4 h", min: 360 },
+  { key: "unknown", label: "Unknown", min: null },
+];
+
+// The locked role model: 5 clinical roles enter the companion (role tunes
+// tone/depth ONLY — the safety content is identical); the student gets two
+// doors; the family gets a safe guide, never the companion.
+const CLINICAL_ROLES: { role: string; sub?: string }[] = [
+  { role: "Doctor / GP", sub: "The clinician with no surgeon down the hall" },
+  { role: "Resident / Intern" },
+  { role: "Nurse" },
+  { role: "Midwife", sub: "Often the only health worker in the village post" },
+  { role: "Community health worker" },
+];
+
+// Conservative dose backstop (plan §3): number + dose unit. /µL and % are
+// deliberately NOT matched so lab values never trip it.
+const DOSE_RE = /\b\d[\d.,]*\s*(mg\/kg|m[lL]\/kg|mg|mcg|µg|IU|units?|mmol|mEq)\b/;
+
+function toggleIn(list: string[], item: string): string[] {
+  return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
+}
+
+function ConsultFlow({
+  onExit,
+  onStartSim,
+}: {
+  onExit: () => void;
+  onStartSim: () => void;
+}) {
+  const [stage, setStage] = useState<
+    "identity" | "student" | "family" | "intake" | "chat"
+  >("identity");
+  // Greeting only — deliberately NEVER sent to the server (zero value to the
+  // model, one less injection surface, one less identity on the wire).
+  const [clinName, setClinName] = useState("");
+  const [role, setRole] = useState("");
+  const [ptName, setPtName] = useState("");
+  const [ageYears, setAgeYears] = useState("");
+  const [sex, setSex] = useState<"male" | "female" | "">("");
+  const [complaints, setComplaints] = useState<string[]>(["Abdominal pain"]);
+  const [complaintNote, setComplaintNote] = useState("");
+  const [examFindings, setExamFindings] = useState<string[]>([]);
+  const [resources, setResources] = useState<string[]>(
+    RESOURCE_ITEMS.filter((r) => r.rural).map((r) => r.label),
+  );
+  const [transferKey, setTransferKey] = useState("240");
+  const [messages, setMessages] = useState<ConsultMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [cPhase, setCPhase] = useState<"idle" | "streaming" | "ready">("idle");
+  const [cError, setCError] = useState<string | null>(null);
+  const consultAbortRef = useRef<AbortController | null>(null);
+  const chatRef = useRef<HTMLDivElement | null>(null);
+
+  // Leaving the flow aborts any in-flight stream; unmount wipes the state —
+  // which IS the PHI guarantee.
+  useEffect(() => () => consultAbortRef.current?.abort(), []);
+
+  useEffect(() => {
+    const el = chatRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (nearBottom) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  const age = parseInt(ageYears, 10);
+  const ageValid = Number.isInteger(age) && age >= 0 && age <= 18;
+  const canStart =
+    ptName.trim().length > 0 && ageValid && sex !== "" && complaints.length > 0;
+
+  function buildIntake() {
+    const complaint = [...complaints, complaintNote.trim()]
+      .filter(Boolean)
+      .join("; ")
+      .slice(0, 200);
+    const transfer = TRANSFER_CHOICES.find((t) => t.key === transferKey);
+    return {
+      name: ptName.trim().slice(0, 40),
+      ageYears: age,
+      sex,
+      complaint,
+      examFindings: examFindings.slice(0, 24),
+      resources: resources.slice(0, 16),
+      transferTimeMin: transfer ? transfer.min : null,
+      clinicianRole: role.slice(0, 40),
+    };
+  }
+
+  // A local COPY of the hero's reader loop on purpose — sharing it would mean
+  // editing the hero (plan §4: no hero edits beyond the gate + the door).
+  async function streamConsult(res: Response) {
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const delta = decoder.decode(value, { stream: true });
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        next[next.length - 1] = { ...last, text: last.text + delta };
+        return next;
+      });
+    }
+    // The server streams straight through (no buffering), so the dose check
+    // can only run on the COMPLETED text — an honest post-hoc flag.
+    setMessages((prev) => {
+      const next = [...prev];
+      const last = next[next.length - 1];
+      if (last?.role === "companion" && DOSE_RE.test(last.text))
+        next[next.length - 1] = { ...last, doseFlag: true };
+      return next;
+    });
+  }
+
+  function historyPayload(msgs: ConsultMessage[]) {
+    const entries = msgs
+      .filter((m) => m.text.trim().length > 0)
+      .map((m) => ({
+        role: m.role === "companion" ? ("assistant" as const) : ("user" as const),
+        content: m.text.slice(0, 6000),
+      }));
+    // Keep the opening assessment (it anchors the consult) + the most recent
+    // turns, inside the server's 40-entry cap.
+    return entries.length > 39 ? [entries[0], ...entries.slice(-38)] : entries;
+  }
+
+  // The auto-fired first pass (the hero's "present" beat): entering the chat
+  // never waits for the clinician to compose a question.
+  async function startConsult() {
+    if (!canStart || cPhase === "streaming") return;
+    setCError(null);
+    setStage("chat");
+    setCPhase("streaming");
+    setMessages([{ role: "companion", text: "" }]);
+    const controller = new AbortController();
+    consultAbortRef.current = controller;
+    try {
+      const res = await fetch("/api/consult", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          intent: "open",
+          intake: buildIntake(),
+          history: [],
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        setCError(`The companion could not open the consult (${res.status}).`);
+        setMessages([]);
+        setStage("intake");
+        setCPhase("idle");
+        return;
+      }
+      await streamConsult(res);
+      setCPhase("ready");
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setCError((err as Error).message);
+        setMessages([]);
+        setStage("intake");
+        setCPhase("idle");
+      }
+    } finally {
+      consultAbortRef.current = null;
+    }
+  }
+
+  async function sendConsult() {
+    const text = input.trim();
+    if (!text || cPhase !== "ready") return;
+    setCError(null);
+    setInput("");
+    const history = historyPayload(messages);
+    setCPhase("streaming");
+    setMessages((prev) => [
+      ...prev,
+      { role: "clinician", text },
+      { role: "companion", text: "" },
+    ]);
+    const controller = new AbortController();
+    consultAbortRef.current = controller;
+    try {
+      const res = await fetch("/api/consult", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          intent: "reply",
+          intake: buildIntake(),
+          message: text,
+          history,
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        setCError(`The companion failed (${res.status}).`);
+        setMessages((prev) => prev.slice(0, -2));
+        setInput(text);
+        setCPhase("ready");
+        return;
+      }
+      await streamConsult(res);
+      setCPhase("ready");
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setCError((err as Error).message);
+        setMessages((prev) => prev.slice(0, -2));
+        setInput(text);
+        setCPhase("ready");
+      }
+    } finally {
+      consultAbortRef.current = null;
+    }
+  }
+
+  const transferLabel =
+    TRANSFER_CHOICES.find((t) => t.key === transferKey)?.label ?? "";
+  const noCT = !resources.includes("CT scanner");
+  const noUS = !resources.includes("Ultrasound");
+  const noSurgeon = !resources.includes("Surgeon on site");
+
+  return (
+    <main className="mx-auto flex min-h-[100svh] w-full max-w-xl flex-col px-5 py-6">
+      <div className="mb-5 flex items-baseline justify-between gap-3">
+        <div className="flex items-baseline gap-2.5">
+          <span className="text-sm font-semibold tracking-tight text-neutral-100">
+            SALUS Zero
+          </span>
+          <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+            Consult
+          </span>
+        </div>
+        <button
+          onClick={onExit}
+          className="text-[11px] text-neutral-500 transition hover:text-neutral-300"
+        >
+          {stage === "chat"
+            ? "End the consult — erases the patient from this device"
+            : "← Back to the night"}
+        </button>
+      </div>
+
+      {stage === "identity" && (
+        <section className="flex flex-col gap-5 motion-safe:animate-reveal-in">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+              Before we begin
+            </p>
+            <h1 className="mt-2 font-vignette text-2xl text-neutral-100">
+              Who's at the bedside?
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+              Your role only changes how much I explain — never the clinical
+              safety content. It mainly tells the tool whether it can help you
+              at all.
+            </p>
+          </div>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+              Your name (optional — stays on this device, never sent)
+            </span>
+            <input
+              value={clinName}
+              onChange={(e) => setClinName(e.target.value)}
+              maxLength={40}
+              className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-[15px] focus:border-neutral-500 focus:outline-none"
+            />
+          </label>
+
+          <div className="flex flex-col gap-2">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+              Role — health worker at the bedside
+            </span>
+            {CLINICAL_ROLES.map((r) => (
+              <button
+                key={r.role}
+                onClick={() => {
+                  setRole(r.role);
+                  setStage("intake");
+                }}
+                className="rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-3 text-left transition hover:border-ember-500/50"
+              >
+                <span className="text-[15px] text-neutral-200">{r.role}</span>
+                {r.sub && (
+                  <span className="mt-0.5 block text-xs text-neutral-500">
+                    {r.sub}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="h-px flex-1 bg-neutral-800" />
+            <span className="text-[10px] uppercase tracking-[0.14em] text-neutral-600">
+              Not managing a patient?
+            </span>
+            <span className="h-px flex-1 bg-neutral-800" />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => setStage("student")}
+              className="rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-left transition hover:border-neutral-600"
+            >
+              <span className="text-[15px] text-neutral-300">
+                Medical student
+              </span>
+              <span className="mt-0.5 block text-xs text-neutral-500">
+                Learn by playing a case — or prepare for your posting
+              </span>
+            </button>
+            <button
+              onClick={() => setStage("family")}
+              className="rounded-xl border border-dashed border-neutral-800 bg-neutral-900/30 px-4 py-3 text-left transition hover:border-amber-600/60"
+            >
+              <span className="text-[15px] text-neutral-300">
+                I'm here about my own child
+              </span>
+              <span className="mt-0.5 block text-xs text-neutral-500">
+                A calm, safe guide — no diagnosis
+              </span>
+            </button>
+          </div>
+        </section>
+      )}
+
+      {stage === "student" && (
+        <section className="flex flex-col gap-5 motion-safe:animate-reveal-in">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+              You're a medical student
+            </p>
+            <h1 className="mt-2 font-vignette text-2xl text-neutral-100">
+              Two ways to learn — both are for you.
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+              You'll likely be posted somewhere just like this. Learn the
+              judgement now — and learn the tool you'll lean on when you get
+              there.
+            </p>
+          </div>
+          <button
+            onClick={onStartSim}
+            className="rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-3.5 text-left transition hover:border-neutral-600"
+          >
+            <span className="text-[15px] text-neutral-200">
+              Play a case in the simulator
+            </span>
+            <span className="mt-0.5 block text-xs text-neutral-500">
+              Learn by doing — a hidden case, free-text decisions, an
+              attending's debrief
+            </span>
+          </button>
+          <button
+            onClick={() => {
+              setRole("Student");
+              setStage("intake");
+            }}
+            className="rounded-xl border border-ember-500/50 bg-neutral-900/60 px-4 py-3.5 text-left transition hover:border-ember-400"
+          >
+            <span className="text-[15px] text-neutral-100">
+              Explore the companion
+            </span>
+            <span className="mt-0.5 block text-xs text-ember-300/80">
+              See how it reasons — prepare for your posting
+            </span>
+          </button>
+          <p className="text-xs leading-relaxed text-neutral-500">
+            In learning mode the companion explains more — and it stays honest:
+            the responsible clinician always owns the decision.
+          </p>
+          <button
+            onClick={() => setStage("identity")}
+            className="self-start text-xs text-neutral-500 transition hover:text-neutral-300"
+          >
+            ← Back
+          </button>
+        </section>
+      )}
+
+      {stage === "family" && (
+        <section className="flex flex-col gap-5 motion-safe:animate-reveal-in">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-amber-400/90">
+              A guide for parents &amp; caregivers
+            </p>
+            <h1 className="mt-2 font-vignette text-2xl text-neutral-100">
+              You did the right thing checking. Here's the safe, honest guide.
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+              This isn't a diagnosis or a score — your child needs a person who
+              can examine them. Here's how to get there well.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-3 rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
+              <span className="text-lg" aria-hidden>
+                1
+              </span>
+              <p className="text-sm leading-relaxed text-neutral-300">
+                <span className="font-semibold text-neutral-100">
+                  Take your child to the nearest hospital or clinic.
+                </span>{" "}
+                Belly pain in a child that worries you is always worth a real
+                examination — going in is never the wrong call.
+              </p>
+            </div>
+            <div className="flex gap-3 rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
+              <span className="text-lg" aria-hidden>
+                2
+              </span>
+              <p className="text-sm leading-relaxed text-neutral-300">
+                <span className="font-semibold text-neutral-100">
+                  Bring what you've noticed:
+                </span>{" "}
+                when the pain started, whether it moved, vomiting, fever, and
+                when they last ate, drank, and passed urine.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-amber-400/90">
+              Go now — don't wait — if you see
+            </p>
+            <ul className="flex flex-col gap-1.5 text-sm leading-relaxed text-neutral-300">
+              <li>· A hard belly, or pain that makes them refuse to be touched</li>
+              <li>· Drowsy, floppy, or hard to wake</li>
+              <li>· Vomiting that won't stop, or green vomit</li>
+              <li>· No urine for many hours, or looking very dry</li>
+              <li>
+                · Pain that suddenly eased but the child looks{" "}
+                <em className="text-amber-300/90">worse</em> — that can be
+                dangerous, not better
+              </li>
+            </ul>
+          </div>
+
+          <div className="rounded-xl border border-red-900/70 bg-red-950/30 p-4 text-sm leading-relaxed text-red-200">
+            <span className="font-semibold">
+              Call your local emergency number now
+            </span>{" "}
+            (in Türkiye: 112) if your child is very hard to wake, breathing
+            fast, cold or mottled — or you're frightened by how they look.
+            Trust that feeling.
+          </div>
+
+          <p className="text-xs leading-relaxed text-neutral-600">
+            I can't point you to a specific nearest facility — that needs real
+            local data this tool doesn't have, and a wrong direction is
+            dangerous. Your fastest known hospital or emergency line is the
+            right choice.
+          </p>
+          <button
+            onClick={() => setStage("identity")}
+            className="self-start text-xs text-neutral-500 transition hover:text-neutral-300"
+          >
+            ← Back
+          </button>
+        </section>
+      )}
+
+      {stage === "intake" && (
+        <section className="flex flex-col gap-5 pb-24 motion-safe:animate-reveal-in">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+              Confirm — don't compose
+              {clinName.trim() ? ` · ${clinName.trim()}` : ""}
+            </p>
+            <h1 className="mt-2 font-vignette text-2xl text-neutral-100">
+              The patient in front of you
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+              Pre-filled for a typical rural district hospital — touch only
+              what's different. Under a minute.
+            </p>
+          </div>
+
+          {cError && (
+            <p className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+              {cError}
+            </p>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                Name <span className="text-ember-400">*</span>
+              </span>
+              <input
+                value={ptName}
+                onChange={(e) => setPtName(e.target.value)}
+                maxLength={40}
+                className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-[15px] focus:border-neutral-500 focus:outline-none"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                Age (years) <span className="text-ember-400">*</span>
+              </span>
+              <input
+                value={ageYears}
+                onChange={(e) => setAgeYears(e.target.value)}
+                inputMode="numeric"
+                maxLength={2}
+                className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-[15px] tabular-nums focus:border-neutral-500 focus:outline-none"
+              />
+            </label>
+          </div>
+          {ageYears !== "" && !ageValid && (
+            <p className="-mt-3 text-xs text-amber-300/90">
+              Age must be 0–18 — this tool is grounded for children only.
+            </p>
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+              Sex <span className="text-ember-400">*</span>{" "}
+              <span className="normal-case tracking-normal text-neutral-600">
+                (drives which can't-miss diagnoses come forward)
+              </span>
+            </span>
+            <div className="flex gap-2">
+              {(["male", "female"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSex(s)}
+                  className={`rounded-lg border px-4 py-2 text-sm transition ${
+                    sex === s
+                      ? "border-ember-500/60 bg-ember-500/15 text-neutral-100"
+                      : "border-neutral-700 bg-neutral-900/40 text-neutral-400 hover:border-neutral-500"
+                  }`}
+                >
+                  {s === "male" ? "Boy" : "Girl"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+              Complaint &amp; history
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {COMPLAINT_CHIPS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setComplaints((prev) => toggleIn(prev, c))}
+                  className={`rounded-full border px-3 py-1.5 text-[13px] transition ${
+                    complaints.includes(c)
+                      ? "border-ember-500/60 bg-ember-500/15 text-neutral-100"
+                      : "border-neutral-700 bg-neutral-900/40 text-neutral-400 hover:border-neutral-500"
+                  }`}
+                >
+                  {complaints.includes(c) ? "✓ " : ""}
+                  {c}
+                </button>
+              ))}
+            </div>
+            <input
+              value={complaintNote}
+              onChange={(e) => setComplaintNote(e.target.value)}
+              maxLength={80}
+              placeholder="Anything else, in a few words… (optional)"
+              className="mt-1 rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+              Exam findings{" "}
+              <span className="normal-case tracking-normal text-neutral-600">
+                (no imaging needed)
+              </span>
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {EXAM_CHIPS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setExamFindings((prev) => toggleIn(prev, c))}
+                  className={`rounded-full border px-3 py-1.5 text-[13px] transition ${
+                    examFindings.includes(c)
+                      ? "border-ember-500/60 bg-ember-500/15 text-neutral-100"
+                      : "border-neutral-700 bg-neutral-900/40 text-neutral-400 hover:border-neutral-500"
+                  }`}
+                >
+                  {examFindings.includes(c) ? "✓ " : ""}
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+              What this hospital actually has tonight
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              {RESOURCE_ITEMS.map((r) => {
+                const on = resources.includes(r.label);
+                return (
+                  <button
+                    key={r.label}
+                    onClick={() =>
+                      setResources((prev) => toggleIn(prev, r.label))
+                    }
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-[13px] transition ${
+                      on
+                        ? "border-sky-500/40 bg-sky-500/10 text-sky-200"
+                        : "border-neutral-800 bg-neutral-900/30 text-neutral-500 hover:border-neutral-600"
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`grid h-4 w-4 flex-none place-items-center rounded border text-[10px] ${
+                        on
+                          ? "border-sky-400 bg-sky-400 text-neutral-950"
+                          : "border-neutral-700 text-neutral-700"
+                      }`}
+                    >
+                      {on ? "✓" : "—"}
+                    </span>
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+              Time to definitive care (referral)
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {TRANSFER_CHOICES.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTransferKey(t.key)}
+                  className={`rounded-lg border px-3.5 py-1.5 text-[13px] tabular-nums transition ${
+                    transferKey === t.key
+                      ? "border-sky-500/50 bg-sky-500/10 text-sky-200"
+                      : "border-neutral-700 bg-neutral-900/40 text-neutral-400 hover:border-neutral-500"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="sticky bottom-4 mt-2 flex gap-2">
+            <button
+              onClick={() => setStage("identity")}
+              className="rounded-lg border border-neutral-700 bg-neutral-950/90 px-4 py-2.5 text-sm text-neutral-400 backdrop-blur transition hover:text-neutral-200"
+            >
+              ← Back
+            </button>
+            <button
+              onClick={() => void startConsult()}
+              disabled={!canStart}
+              className="flex-1 rounded-lg bg-ember-400 px-4 py-2.5 text-sm font-semibold text-neutral-950 shadow-lg shadow-ember-500/20 transition hover:bg-ember-300 disabled:opacity-40"
+            >
+              Bring {ptName.trim() || "the patient"} in →
+            </button>
+          </div>
+        </section>
+      )}
+
+      {stage === "chat" && (
+        <section className="flex min-h-0 flex-1 flex-col gap-3 motion-safe:animate-reveal-in">
+          <div className="sticky top-3 z-10 flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900/80 px-4 py-2.5 backdrop-blur">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-neutral-100">
+                {ptName.trim() || "Patient"} · {ageYears}
+              </div>
+              <div className="truncate text-[11px] tabular-nums text-neutral-500">
+                {[
+                  sex === "male" ? "boy" : "girl",
+                  noCT ? "no CT" : null,
+                  noUS ? "no US" : null,
+                  noSurgeon ? "no surgeon" : null,
+                  `${transferLabel} transfer`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            </div>
+            <div className="ml-auto flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-sky-300/90">
+              <span
+                aria-hidden
+                className="h-1.5 w-1.5 rounded-full bg-sky-400 motion-safe:animate-pulse"
+              />
+              grounded
+            </div>
+          </div>
+
+          {role === "Student" && (
+            <p className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs leading-relaxed text-sky-200">
+              Learning mode — the companion explains more here. The responsible
+              clinician always owns the decision.
+            </p>
+          )}
+
+          <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-xs leading-relaxed text-amber-200/90">
+            <span className="font-semibold">
+              Prototype — not a validated medical device.
+            </span>{" "}
+            It augments your judgement, never replaces it. No doses, no
+            directives — verify, you decide.
+          </div>
+
+          <div
+            ref={chatRef}
+            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-2 pr-1"
+          >
+            {messages.map((m, i) => (
+              <div key={i}>
+                {m.role === "clinician" ? (
+                  <div className="ml-8 rounded-lg border border-neutral-700/70 bg-neutral-800/50 px-4 py-2.5">
+                    <div className="mb-1 text-[11px] uppercase tracking-wider text-neutral-500">
+                      You
+                    </div>
+                    <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-neutral-200">
+                      {m.text}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    {m.text === "" && cPhase === "streaming" ? (
+                      <p className="font-vignette text-[15px] italic text-neutral-500">
+                        Reading {ptName.trim() || "the patient"}'s intake
+                        against the reference…
+                      </p>
+                    ) : (
+                      <div className="whitespace-pre-wrap font-vignette text-[16px] leading-relaxed text-neutral-200">
+                        {m.text}
+                        {cPhase === "streaming" && i === messages.length - 1 && (
+                          <span
+                            aria-hidden
+                            className="text-neutral-500 motion-safe:animate-pulse"
+                          >
+                            ▍
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {m.doseFlag && (
+                      <p className="mt-2 rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-xs leading-relaxed text-red-300">
+                        ⚠ This reply appears to contain a dose or directive —
+                        the tool must not do that. Treat it as an error and
+                        verify independently.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {cError && (
+            <p className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+              {cError}
+            </p>
+          )}
+
+          <div className="flex gap-2 pb-2">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (cPhase === "ready" && input.trim()) void sendConsult();
+                }
+              }}
+              rows={2}
+              disabled={cPhase !== "ready"}
+              placeholder={`Ask a follow-up about ${ptName.trim() || "the patient"}… (Enter to send)`}
+              className="flex-1 resize-none rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-[15px] leading-relaxed placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+            />
+            <button
+              onClick={() => void sendConsult()}
+              disabled={cPhase !== "ready" || !input.trim()}
+              className="self-stretch rounded-lg bg-neutral-100 px-4 text-sm font-medium text-neutral-900 transition hover:bg-white disabled:opacity-40"
+            >
+              Send
+            </button>
+          </div>
+        </section>
+      )}
+    </main>
   );
 }
