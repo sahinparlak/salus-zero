@@ -654,6 +654,7 @@ export default function App() {
       <div className="w-full border-b border-neutral-800/60 px-4 py-1.5 text-center text-[11px] tracking-wide text-neutral-500">
         Training simulation — not medical advice. Doses and thresholds are
         illustrative.
+        <span className="ml-2 text-neutral-700">build {__BUILD_REF__}</span>
       </div>
 
       <main className="flex-1 mx-auto w-full max-w-5xl px-6 py-8 flex flex-col gap-6">
@@ -1062,6 +1063,7 @@ function ColdOpen({
       <p className="mt-4 max-w-md text-[11px] leading-relaxed tracking-wide text-neutral-600">
         Training simulation — not medical advice. Doses and thresholds are
         illustrative.
+        <span className="ml-2 text-neutral-700">build {__BUILD_REF__}</span>
       </p>
     </main>
   );
