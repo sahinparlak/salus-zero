@@ -104,19 +104,31 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     complaintChips: parsed.intake.complaintChips ?? [],
     labs: parsed.intake.labs ?? { wbcK: null, neutPct: null, tempC: null },
   };
-  const summary =
-    intakeSummary(intake) +
-    "\n\n" +
-    (legacyClient
-      ? "CODE-COMPUTED SCORES: unavailable for this session (app version predates structured scoring). Do NOT compute PAS/Alvarado yourself; say the scores are unavailable this session and reason from the clinical picture instead."
-      : renderScoresBlock(intake));
+  // The scores block rides in the CURRENT user turn, not the top-of-context
+  // intake. Position implies chronology to the model: with the block at the
+  // top, a mid-consult labs change lost to the transcript's stale score lines
+  // (caught live 11 Tem — the model even asserted the top block was
+  // "unchanged" without reading it). Under the question being answered, the
+  // current numbers cannot lose that fight.
+  const scoresText = legacyClient
+    ? "CODE-COMPUTED SCORES: unavailable for this session (app version predates structured scoring). Do NOT compute PAS/Alvarado yourself; say the scores are unavailable this session and reason from the clinical picture instead."
+    : renderScoresBlock(intake);
+  const summary = intakeSummary(intake);
   const messages =
     parsed.intent === "open"
-      ? [{ role: "user" as const, content: summary + OPEN_GLUE }]
+      ? [
+          {
+            role: "user" as const,
+            content: summary + "\n\n" + scoresText + OPEN_GLUE,
+          },
+        ]
       : mergeAlternating([
           { role: "user" as const, content: summary },
           ...parsed.history,
-          { role: "user" as const, content: parsed.message! },
+          {
+            role: "user" as const,
+            content: parsed.message! + "\n\n" + scoresText,
+          },
         ]);
 
   // No x-salus-state header: the companion is stateless and holds no sim state.

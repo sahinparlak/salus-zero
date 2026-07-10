@@ -144,7 +144,7 @@ export function renderScoresBlock(intake: Intake): string {
   const pas = computePas(intake);
   const alv = computeAlvarado(intake);
   const lines = [
-    "CODE-COMPUTED SCORES (deterministic — computed by the application from the structured intake):",
+    "CODE-COMPUTED SCORES (CURRENT — recomputed THIS TURN from the structured intake; supersedes any score mentioned anywhere earlier in the conversation):",
     `- ${pas.line}`,
     `- ${alv.line}`,
   ];

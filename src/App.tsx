@@ -2048,6 +2048,9 @@ function ConsultFlow({
   const [labTemp, setLabTemp] = useState("");
   const consultAbortRef = useRef<AbortController | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
+  // Scoring-relevant intake as last sent (chips + exam + labs, JSON) — lets
+  // sendConsult stamp a deterministic "intake changed" cue on the next message.
+  const lastScoringSliceRef = useRef<string | null>(null);
 
   // Leaving the flow aborts any in-flight stream; unmount wipes the state —
   // which IS the PHI guarantee.
@@ -2145,13 +2148,21 @@ function ConsultFlow({
     setMessages([{ role: "companion", text: "" }]);
     const controller = new AbortController();
     consultAbortRef.current = controller;
+    const intake = buildIntake();
+    // Seed the change-tracker with the opening intake so the first reply only
+    // carries the "intake changed" cue if something actually changed.
+    lastScoringSliceRef.current = JSON.stringify({
+      c: intake.complaintChips,
+      e: intake.examFindings,
+      l: intake.labs,
+    });
     try {
       const res = await fetch("/api/consult", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           intent: "open",
-          intake: buildIntake(),
+          intake,
           history: [],
         }),
         signal: controller.signal,
@@ -2191,14 +2202,33 @@ function ConsultFlow({
     ]);
     const controller = new AbortController();
     consultAbortRef.current = controller;
+    // Code-owned cue against transcript anchoring: when the scoring-relevant
+    // intake changed since the LAST send (labs entered, chips re-ticked), the
+    // CLIENT says so — deterministically, in the API message only (the chat
+    // bubble shows exactly what was typed). Without this, a neutral message
+    // lets the model echo its own stale score lines from the transcript
+    // instead of the updated CODE-COMPUTED block (caught live, 11 Tem).
+    const intake = buildIntake();
+    const scoringSlice = JSON.stringify({
+      c: intake.complaintChips,
+      e: intake.examFindings,
+      l: intake.labs,
+    });
+    const intakeChanged =
+      lastScoringSliceRef.current !== null &&
+      lastScoringSliceRef.current !== scoringSlice;
+    lastScoringSliceRef.current = scoringSlice;
+    const apiMessage = intakeChanged
+      ? `${text}\n\n[App note: the structured intake changed since the previous message — labs/chips updated.]`
+      : text;
     try {
       const res = await fetch("/api/consult", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           intent: "reply",
-          intake: buildIntake(),
-          message: text,
+          intake,
+          message: apiMessage,
           history,
         }),
         signal: controller.signal,
