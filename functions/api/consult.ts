@@ -38,6 +38,7 @@ const IntakeSchema = z.object({
   resources: z.array(z.string().trim().min(1).max(60)).max(16).default([]),
   transferTimeMin: z.number().int().min(0).max(100000).nullable().default(null),
   clinicianRole: z.string().trim().max(40).default(""),
+  clinicianName: z.string().trim().max(40).default(""),
 });
 
 const HistoryMessageSchema = z.object({
@@ -110,7 +111,9 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       // before the prototype/"verify, you decide" close (curl checkpoint,
       // Day 1). Headroom so the safety close always lands. (Verbosity of the
       // opening is a Day-3 prompt-tuning item, not a ceiling problem.)
-      max_tokens: 2600,
+      // Sized to the prompt's word budgets (~350-word opening, ~120-word
+      // follow-ups) with generous margin — small enough to backstop verbosity.
+      max_tokens: 1400,
       stream: true,
       // Grounding comes from the reference, not from long deliberation — keep
       // thinking off for the fastest first token. On Sonnet 5, omitting

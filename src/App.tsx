@@ -2049,6 +2049,9 @@ function ConsultFlow({
       resources: resources.slice(0, 16),
       transferTimeMin: transfer ? transfer.min : null,
       clinicianRole: role.slice(0, 40),
+      // Sent for address only ("Dr. Şahin") — ephemeral like the rest of the
+      // intake, never persisted anywhere.
+      clinicianName: clinName.trim().slice(0, 40),
     };
   }
 
@@ -2225,7 +2228,7 @@ function ConsultFlow({
 
           <label className="flex flex-col gap-1.5">
             <span className="text-[11px] uppercase tracking-wider text-neutral-500">
-              Your name (optional — stays on this device, never sent)
+              Your name (optional — used only to address you, never stored)
             </span>
             <input
               value={clinName}
@@ -2678,6 +2681,44 @@ function ConsultFlow({
             It augments your judgement, never replaces it. No doses, no
             directives — verify, you decide.
           </div>
+
+          {/* The pinned anamnesis: exactly what was entered, always in view
+              (collapsible). This is now the wrong-entry catch — the companion
+              is told NOT to re-narrate the intake, so replies stay short. */}
+          <details
+            open
+            className="rounded-lg border border-neutral-800 bg-neutral-900/50 px-3 py-2 text-xs leading-relaxed"
+          >
+            <summary className="cursor-pointer select-none text-[11px] uppercase tracking-wider text-neutral-500">
+              Anamnesis — what you entered
+            </summary>
+            <div className="mt-2 flex flex-col gap-1 text-neutral-300">
+              <div>
+                <span className="text-neutral-500">Complaint: </span>
+                {[...complaints, complaintNote.trim()]
+                  .filter(Boolean)
+                  .join("; ") || "—"}
+              </div>
+              <div>
+                <span className="text-neutral-500">Exam: </span>
+                {examFindings.length ? examFindings.join("; ") : "none entered"}
+              </div>
+              <div>
+                <span className="text-neutral-500">Has tonight: </span>
+                {resources.length ? resources.join(", ") : "none"}
+              </div>
+              <div>
+                <span className="text-neutral-500">Not available: </span>
+                {RESOURCE_ITEMS.filter((r) => !resources.includes(r.label))
+                  .map((r) => r.label)
+                  .join(", ") || "—"}
+              </div>
+              <div>
+                <span className="text-neutral-500">Transfer: </span>
+                {transferLabel}
+              </div>
+            </div>
+          </details>
 
           <div
             ref={chatRef}
