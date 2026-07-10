@@ -58,14 +58,21 @@ yalancı güvence). İmza yoksa rail yapılmaz.
 | Çıktı yalnız İngilizce (misyonun asıl kullanıcısına Türkçe yok) | çeviri ayrı güvenlik yüzeyi — doğrulanmadan yapılmaz | **[README]** + POST-HACKATHON |
 | Mobil tur (hap girdi + panolar telefonda) | Şahin'in cihaz turu bekleniyor | **[BU-HAFTA — test]** |
 
-## 5. Skor aritmetiği hâlâ modelin elinde **[README — kuzey-yıldızının companion yarısı]**
+## 5. ✅ ÇÖZÜLDÜ (10 Tem) — Skor aritmetiği artık KOD-SAHİPLİ
 
-Canlıda iki kez görüldü: bir toplama hatası (9/10, prompt'la düzeltildi),
-bir bileşen-tanıma atlaması (anoreksi). Hero'da skor koda alındı; companion'da
-PAS bileşenleri intake çiplerinden DETERMİNİSTİK hesaplanabilirdi (kod-sahipli),
-model yalnız dil derisi olurdu. Post-hackathon'un en net mimari maddesi;
-bu hafta dürüst sınır: prompt-yama ("bileşenleri listele, topla, kontrol et")
-+ red-team'de elle toplam/bileşen kontrolü.
+Canlıda üç kez görülmüştü (toplama hatası 9/10; "=11 → capped at 10/10";
+anoreksi bileşen-atlaması). Jüri panelinin de 1 numaralı önerisiydi → yapıldı:
+`functions/lib/consultScore.ts` PAS/Alvarado'yu yapısal intake'ten deterministik
+hesaplar (eşikler referans §A/§B'ye demirli; WBC ≥10k PAS / >10k Alvarado ayrımı
+dahil), her turda "CODE-COMPUTED SCORES" bloğu olarak gider; model yalnız dil
+derisi — sunar, yorumlar, ASLA hesaplamaz. Lablar chat'teki yapısal şeritten
+girilir (geçersiz giriş görünür işaretlenir, sessiz düşmez); çipler anamnez
+kartında konsült ortasında yeniden işaretlenebilir (seri muayene); anlatıda
+geçen ama işaretlenmemiş bileşeni model SKORLAMAZ, "çipi işaretle" diye bayraklar
+(ret tablosuna aday 12. ret). Bayat istemci güvenliği: skor alanları olmayan
+eski bundle → "scores unavailable this session", asla sönük-skor-otoriter.
+`pnpm test` 15 birim testiyle repo kendi kanıtını üretir. Kuzey-yıldızının
+companion yarısı KAPANDI.
 
 ---
 

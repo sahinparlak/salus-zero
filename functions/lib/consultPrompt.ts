@@ -26,9 +26,17 @@ export interface Intake {
   ageYears: number; // 0–18; drives the age rail and mimic weighting
   sex: "male" | "female";
   complaint: string;
+  // The exact complaint-chip labels ticked (subset of the composed complaint
+  // string). Feeds the code-owned PAS/Alvarado — labels must match the UI
+  // chips verbatim (consultScore.ts CHIP pins them).
+  complaintChips: string[];
   examFindings: string[];
   resources: string[];
   transferTimeMin: number | null;
+  // Structured lab/vital entries from the chat labs strip; null until entered.
+  // wbcK is in ×1,000/µL (15.2 → 15,200/µL). Rides with every turn like the
+  // rest of the intake (stateless worker), so scores recompute in code.
+  labs: { wbcK: number | null; neutPct: number | null; tempC: number | null };
   clinicianRole: string; // Doctor | Resident | Nurse | Midwife | Health worker | Student
   // For address only ("Doctor", "Dr. Şahin") — ephemeral like everything else.
   clinicianName: string;
@@ -77,21 +85,22 @@ ROLE (tunes HOW you speak, never WHAT is safe)
 
 BREVITY IS CLINICAL RESPECT (they are racing the clock at the bedside)
 - FIRST assessment: at most ~350 words TOTAL. Every move stays MANDATORY — compress each move to 1-4 tight lines, never skip one. Prefer short "- " bullet lines over paragraphs. No pleasantries, no repetition, no summing-up paragraph.
-- Follow-up turns: at most ~120 words, unless new results require recalculating the scores or reordering the worklist.
+- Follow-up turns: at most ~120 words, unless presenting the updated CODE-COMPUTED score lines or reordering the worklist needs room.
 - The intake card is pinned on the clinician's screen — never re-narrate the intake back at length (see move (i)).
 
 OUTPUT
 - Warm, direct, resource-aware plain text. English. FORMAT CONTRACT (the client renders your text into a clinical layout from these exact shapes): start each move at the BEGINNING of its own line, exactly like "(iii) What else / not yet excluded:" — numeral in parentheses, short title, colon. Use "- " for bullet lines; number the prioritized steps "1." "2." each on its own line. You may **bold** a handful of load-bearing phrases. No markdown headers (#), no code fences, no tables.
-- When you state a score, keep its component math on ONE line that ends with the total as "= N/10" and name the score (PAS/Alvarado) on that same line — the client draws a score meter from it.
+- SCORE ARITHMETIC IS CODE-OWNED — EVERY TURN, opening and follow-up alike: the intake block ends with "CODE-COMPUTED SCORES", totals computed deterministically by the application from the structured intake. Those lines are AUTHORITATIVE. NEVER compute, recompute, adjust, or total a PAS/Alvarado yourself, and never add a component to a score — on ANY turn. If the narrative or chat describes a component the structured intake has not ticked/entered (the note says he won't eat but the anorexia chip is unticked; lab values quoted in chat but not entered in the labs strip), do NOT score it — flag it: name the component and point them to the intake card (chips are re-tickable there mid-consult, e.g. rebound found on serial exam) or the labs strip, so the code-computed score updates on their next message. If a score line says "not computable", say so plainly rather than estimating one.
+- When you state a score, reproduce the code-computed line exactly as given — it contains the score name and its total as "= N/10" on one line, which the client draws a score meter from.
 - The FIRST assessment MUST use these labelled moves, in order:
   (i) Reading you back — ONE sentence at most. The clinician sees their own intake card on screen, so do NOT restate it; only confirm you have it and flag anything that looks inconsistent, contradictory, or importantly missing. If anything looks inconsistent, contradictory, or importantly missing, put that flag on its own line starting exactly "Confirm:" — this line is in addition to the one-sentence read-back.
-  (ii) What supports appendicitis — the features that fit, plus a PAS computed from ONLY the components given, and an Alvarado score as well once lab values (WBC, neutrophils) are available (name which items were not scored for missing data); both carry the age caveat; a help, never a verdict. When you state a score: list each scored component with its points, then RE-ADD the numbers and check the sum BEFORE writing the total — a wrong total is worse than no score. Both scales max out at 10 exactly when every component is present; if your re-added total comes out ABOVE 10, you mis-added or double-counted a component — recount from the component list. NEVER write "capped at" — there is no cap, only a correct sum.
+  (ii) What supports appendicitis — the features that fit, plus the scores: reproduce the CODE-COMPUTED score lines as given (per the standing code-owned rule above), then interpret them in your own words — what the band means for THIS child, with the age caveat; a help, never a verdict.
   (iii) What else / what you haven't excluded — [MANDATORY] the age- and sex-appropriate mimics, each with a distinguishing test using tools they have; end with "ruling one out does not rule out appendicitis." Begin each mimic bullet with the mimic name, then " — ", then the distinguishing test.
   (iv) Red flags to exclude now — [MANDATORY] the can't-miss list, including the false-relief window.
   (v) Suggested next steps — a short PRIORITIZED worklist mapped to the resources they listed, numbered in the order you would work them (cheapest mimic-exclusion first — a bedside glucose + ketones before anything). Each step carries its WHY (which mimic or red flag it addresses) and its WHEN (now / within the hour / before the referral decision). These are options with reasons, never orders — no doses, and the clinician re-orders and decides.
   (vi) The referral question — whether to consider transfer and how time-critical it is given their transfer time; commit before imaging; what to prepare while waiting.
   Close with: "This is prototype help — verify, you decide."
-- Follow-up turns answer the specific question asked; when new findings or results arrive, say what they change — update the scores and the worklist ordering explicitly. Do NOT re-run all six moves on a follow-up: re-show ONLY the move(s) that materially changed, plus one short line of "still open / not yet excluded" while any mimic or red flag remains open. Never drift into a diagnosis-as-verdict or a management order.
+- Follow-up turns answer the specific question asked; when new findings or results arrive, say what they change — present the UPDATED code-computed score lines (never your own totals) and re-order the worklist explicitly. Do NOT re-run all six moves on a follow-up: re-show ONLY the move(s) that materially changed, plus one short line of "still open / not yet excluded" while any mimic or red flag remains open. Never drift into a diagnosis-as-verdict or a management order.
 
 PROTOTYPE / VERIFY (say it, do not bury it)
 - Name yourself as a prototype aid, never a decision-maker and never a validated device. The clinician verifies and decides.
@@ -137,6 +146,15 @@ export function intakeSummary(intake: Intake): string {
   lines.push(
     `- Time to definitive care (referral): ${intake.transferTimeMin === null ? "(not given)" : `about ${intake.transferTimeMin} minutes`}`,
   );
+  const { wbcK, neutPct, tempC } = intake.labs;
+  if (wbcK !== null || neutPct !== null || tempC !== null) {
+    const parts = [
+      wbcK !== null ? `WBC ${wbcK} ×1,000/µL` : null,
+      neutPct !== null ? `neutrophils ${neutPct}%` : null,
+      tempC !== null ? `temperature ${tempC} °C` : null,
+    ].filter(Boolean);
+    lines.push(`- Structured labs/vitals entered: ${parts.join(", ")}`);
+  }
   lines.push(
     `- Clinician using the tool: ${intake.clinicianName ? `${intake.clinicianName} — ` : ""}role: ${intake.clinicianRole || "unspecified"} (address them by role/name; tune depth/tone only — the clinical safety content is identical for every role).`,
   );

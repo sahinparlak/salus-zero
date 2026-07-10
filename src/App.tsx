@@ -1972,6 +1972,16 @@ const RESOURCE_ITEMS: { label: string; rural: boolean }[] = [
   { label: "IV fluids / antibiotics", rural: true },
 ];
 
+// Labs-strip parser: tolerant of Turkish comma decimals ("15,2"), empty → null,
+// out-of-range → null (a typo is not a patient; the worker re-validates).
+function parseLabNum(raw: string, min: number, max: number): number | null {
+  const t = raw.trim().replace(",", ".");
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isFinite(n) || n < min || n > max) return null;
+  return n;
+}
+
 const TRANSFER_CHOICES: { key: string; label: string; min: number | null }[] = [
   { key: "45", label: "< 1 h", min: 45 },
   { key: "90", label: "1–2 h", min: 90 },
@@ -2031,6 +2041,11 @@ function ConsultFlow({
   // The GROUNDED pill's provenance card (source / validation / boundary +
   // the domain-library shelf). Render-only; dies with the flow like all else.
   const [provenanceOpen, setProvenanceOpen] = useState(false);
+  // Labs strip (chat stage) — structured so the WORKER's deterministic
+  // PAS/Alvarado can own the arithmetic; ephemeral like the rest of the intake.
+  const [labWbc, setLabWbc] = useState("");
+  const [labNeut, setLabNeut] = useState("");
+  const [labTemp, setLabTemp] = useState("");
   const consultAbortRef = useRef<AbortController | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
 
@@ -2061,9 +2076,19 @@ function ConsultFlow({
       ageYears: age,
       sex,
       complaint,
+      // Exact chip labels, separately from the composed string — the worker's
+      // code-owned PAS/Alvarado scores from these, never from free text.
+      complaintChips: complaints.slice(0, 12),
       examFindings: examFindings.slice(0, 24),
       resources: resources.slice(0, 16),
       transferTimeMin: transfer ? transfer.min : null,
+      // Labs strip (chat stage); rides with EVERY turn since the worker is
+      // stateless — entering labs updates the code-computed scores next send.
+      labs: {
+        wbcK: parseLabNum(labWbc, 0, 200),
+        neutPct: parseLabNum(labNeut, 0, 100),
+        tempC: parseLabNum(labTemp, 30, 45),
+      },
       clinicianRole: role.slice(0, 40),
       // Sent for address only ("Dr. Şahin") — ephemeral like the rest of the
       // intake, never persisted anywhere.
@@ -2701,6 +2726,63 @@ function ConsultFlow({
             </button>
           </div>
 
+          {/* Labs strip — structured entry so the SCORE ARITHMETIC stays in
+              code: values ride with the next message; the worker recomputes
+              PAS/Alvarado deterministically and the model may only present
+              them. Cold instrument register, like the score meters. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-2">
+            <span className="text-[10px] uppercase tracking-wider text-neutral-500">
+              Labs · scores compute in code
+            </span>
+            {(
+              [
+                ["WBC ×1000/µL", labWbc, setLabWbc, "15.2", 0, 200],
+                ["Neut %", labNeut, setLabNeut, "78", 0, 100],
+                ["Temp °C", labTemp, setLabTemp, "38.2", 30, 45],
+              ] as const
+            ).map(([label, value, set, ph, min, max]) => {
+              // Display and payload must never diverge: a value parseLabNum
+              // would drop (typo / wrong unit like an absolute "15200") is
+              // marked invalid HERE, not silently nulled on send.
+              const invalid =
+                value.trim() !== "" && parseLabNum(value, min, max) === null;
+              return (
+                <label
+                  key={label}
+                  className="flex items-center gap-1.5 text-[11px] text-neutral-400"
+                >
+                  {label}
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={value}
+                    onChange={(e) => set(e.target.value)}
+                    placeholder={ph}
+                    aria-invalid={invalid}
+                    title={
+                      invalid
+                        ? `Out of range (${min}–${max}) — not sent. Check the unit: ${label}.`
+                        : undefined
+                    }
+                    className={`w-16 rounded-md border bg-neutral-950/60 px-2 py-1 font-mono text-xs tabular-nums text-neutral-200 placeholder:text-neutral-700 focus:outline-none ${
+                      invalid
+                        ? "border-red-500/70 text-red-300 focus:border-red-400"
+                        : "border-neutral-700 focus:border-neutral-500"
+                    }`}
+                  />
+                  {invalid && (
+                    <span className="text-[10px] text-red-400">
+                      not sent — check unit
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+            <span className="text-[10px] text-neutral-600">
+              sent with your next message
+            </span>
+          </div>
+
           {provenanceOpen && (
             <div
               id="provenance-card"
@@ -2799,24 +2881,63 @@ function ConsultFlow({
 
           {/* The pinned anamnesis: exactly what was entered, always in view
               (collapsible). This is now the wrong-entry catch — the companion
-              is told NOT to re-narrate the intake, so replies stay short. */}
+              is told NOT to re-narrate the intake, so replies stay short.
+              Complaint/exam chips stay TICKABLE mid-consult (serial-exam
+              doctrine: rebound develops, anorexia gets confirmed) — the intake
+              rides with every message, so the code-computed scores update on
+              the next send. */}
           <details
             open
             className="rounded-xl border border-neutral-800/80 bg-neutral-900/50 px-3.5 py-2 text-xs leading-relaxed"
           >
             <summary className="cursor-pointer select-none text-[11px] uppercase tracking-wider text-neutral-500">
-              Anamnesis — what you entered
+              Anamnesis — what you entered · chips re-tickable
             </summary>
             <div className="mt-2 flex flex-col gap-1 text-neutral-300">
-              <div>
+              <div className="flex flex-wrap items-center gap-1">
                 <span className="text-neutral-500">Complaint: </span>
-                {[...complaints, complaintNote.trim()]
-                  .filter(Boolean)
-                  .join("; ") || "—"}
+                {COMPLAINT_CHIPS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() =>
+                      setComplaints((prev) => toggleIn(prev, c))
+                    }
+                    aria-pressed={complaints.includes(c)}
+                    className={`rounded-full border px-2 py-0.5 text-[11px] transition ${
+                      complaints.includes(c)
+                        ? "border-neutral-500 bg-neutral-700/60 text-neutral-100"
+                        : "border-neutral-800 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+                {complaintNote.trim() && (
+                  <span className="text-neutral-400">
+                    · {complaintNote.trim()}
+                  </span>
+                )}
               </div>
-              <div>
+              <div className="flex flex-wrap items-center gap-1">
                 <span className="text-neutral-500">Exam: </span>
-                {examFindings.length ? examFindings.join("; ") : "none entered"}
+                {EXAM_CHIPS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() =>
+                      setExamFindings((prev) => toggleIn(prev, c))
+                    }
+                    aria-pressed={examFindings.includes(c)}
+                    className={`rounded-full border px-2 py-0.5 text-[11px] transition ${
+                      examFindings.includes(c)
+                        ? "border-neutral-500 bg-neutral-700/60 text-neutral-100"
+                        : "border-neutral-800 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
               </div>
               <div>
                 <span className="text-neutral-500">Has tonight: </span>
@@ -2832,6 +2953,29 @@ function ConsultFlow({
                 <span className="text-neutral-500">Transfer: </span>
                 {transferLabel}
               </div>
+              {(labWbc.trim() || labNeut.trim() || labTemp.trim()) && (
+                <div>
+                  <span className="text-neutral-500">Labs entered: </span>
+                  {/* Rendered from the PARSED values — what the record claims
+                      is exactly what the worker scores from. */}
+                  {[
+                    labWbc.trim() &&
+                      (parseLabNum(labWbc, 0, 200) !== null
+                        ? `WBC ${parseLabNum(labWbc, 0, 200)}k`
+                        : "WBC invalid (not sent)"),
+                    labNeut.trim() &&
+                      (parseLabNum(labNeut, 0, 100) !== null
+                        ? `neut ${parseLabNum(labNeut, 0, 100)}%`
+                        : "neut invalid (not sent)"),
+                    labTemp.trim() &&
+                      (parseLabNum(labTemp, 30, 45) !== null
+                        ? `${parseLabNum(labTemp, 30, 45)} °C`
+                        : "temp invalid (not sent)"),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+              )}
             </div>
           </details>
 

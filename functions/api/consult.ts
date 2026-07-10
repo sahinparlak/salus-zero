@@ -19,6 +19,7 @@ import {
   intakeSummary,
   OPEN_GLUE,
 } from "../lib/consultPrompt";
+import { renderScoresBlock } from "../lib/consultScore";
 
 interface Env {
   ANTHROPIC_API_KEY?: string;
@@ -34,9 +35,23 @@ const IntakeSchema = z.object({
   ageYears: z.number().int().min(0).max(18),
   sex: z.enum(["male", "female"]),
   complaint: z.string().trim().max(200).default(""),
+  // Exact chip labels — feed the code-owned PAS/Alvarado (consultScore.ts).
+  // OPTIONAL (no default): absence marks a stale pre-scoring client bundle,
+  // which must degrade to "scores unavailable", never to a deflated 0-ish
+  // score presented as authoritative.
+  complaintChips: z.array(z.string().trim().min(1).max(60)).max(12).optional(),
   examFindings: z.array(z.string().trim().min(1).max(80)).max(24).default([]),
   resources: z.array(z.string().trim().min(1).max(60)).max(16).default([]),
   transferTimeMin: z.number().int().min(0).max(100000).nullable().default(null),
+  // Labs strip values; wbcK in ×1,000/µL. Bounds are defensive sanity rails,
+  // not clinical judgements — out-of-range entry is a typo, not a patient.
+  labs: z
+    .object({
+      wbcK: z.number().min(0).max(200).nullable().default(null),
+      neutPct: z.number().min(0).max(100).nullable().default(null),
+      tempC: z.number().min(30).max(45).nullable().default(null),
+    })
+    .optional(),
   clinicianRole: z.string().trim().max(40).default(""),
   clinicianName: z.string().trim().max(40).default(""),
 });
@@ -76,7 +91,25 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   // An OPENING has no history by definition — ignore any that was sent, so the
   // array can never end on a (possibly forged) assistant turn (review finding,
   // Day 1; turn.ts always ends free turns on a user message the same way).
-  const summary = intakeSummary(parsed.intake);
+  // The code-computed PAS/Alvarado block rides at the end of the intake
+  // summary every turn — numbers as data here; the never-recompute rule is
+  // static in the system prompt. A payload without the scoring fields is a
+  // stale pre-scoring bundle: degrade to "unavailable" (safe), never to a
+  // deflated score presented as authoritative.
+  const legacyClient =
+    parsed.intake.complaintChips === undefined &&
+    parsed.intake.labs === undefined;
+  const intake = {
+    ...parsed.intake,
+    complaintChips: parsed.intake.complaintChips ?? [],
+    labs: parsed.intake.labs ?? { wbcK: null, neutPct: null, tempC: null },
+  };
+  const summary =
+    intakeSummary(intake) +
+    "\n\n" +
+    (legacyClient
+      ? "CODE-COMPUTED SCORES: unavailable for this session (app version predates structured scoring). Do NOT compute PAS/Alvarado yourself; say the scores are unavailable this session and reason from the clinical picture instead."
+      : renderScoresBlock(intake));
   const messages =
     parsed.intent === "open"
       ? [{ role: "user" as const, content: summary + OPEN_GLUE }]
