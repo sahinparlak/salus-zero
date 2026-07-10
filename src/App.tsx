@@ -1020,40 +1020,50 @@ function ColdOpen({
         </p>
       </div>
 
-      <button
-        onClick={onBegin}
-        disabled={phase === "loading"}
-        className="rounded-lg bg-ember-400 px-6 py-3 text-sm font-semibold text-neutral-950 transition hover:bg-ember-300 disabled:opacity-60 motion-safe:animate-reveal-in"
+      {/* Two doors, side by side — the REAL patient is the primary one (his
+          call, 11 Tem: the companion is the mission; the simulator trains for
+          it). The lamp burns brightest behind the primary door; the training
+          door sits beside it, quieter. Stacks on phones, companion first. */}
+      <div
+        className="grid w-full max-w-2xl gap-4 sm:grid-cols-2 motion-safe:animate-reveal-in"
         style={{ animationDelay: "1700ms" }}
       >
-        {phase === "loading" ? "Opening the case…" : "Begin the night shift"}
-      </button>
-
-      {/* The second door — the night you are already in. A quiet lamp burns
-          behind it: serif voice like the hook above, instrument small-caps
-          below, warm bloom on approach. It must invite without competing
-          with the training door's loud ember. */}
-      <button
-        onClick={onBringPatient}
-        className="group relative flex flex-col items-center gap-1 overflow-hidden rounded-xl border border-ember-500/25 bg-neutral-900/40 px-7 py-3.5 transition hover:border-ember-500/60 hover:bg-neutral-900/70 motion-safe:animate-reveal-in"
-        style={{ animationDelay: "2100ms" }}
-      >
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-x-8 -top-6 h-10 rounded-full opacity-60 blur-xl transition group-hover:opacity-100 motion-safe:animate-lamp-breath"
-          style={{ background: "oklch(0.73 0.15 62 / 0.14)" }}
-        />
-        <span className="relative flex items-baseline gap-2 font-vignette text-[17px] text-neutral-200 transition group-hover:text-neutral-50">
+        <button
+          onClick={onBringPatient}
+          className="group relative flex flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border border-ember-500/50 bg-neutral-900/50 px-6 py-6 transition hover:border-ember-400/80 hover:bg-neutral-900/80"
+        >
           <span
             aria-hidden
-            className="h-1.5 w-1.5 self-center rounded-full bg-ember-400/90 motion-safe:animate-lamp-breath"
+            className="pointer-events-none absolute inset-x-8 -top-6 h-12 rounded-full opacity-70 blur-xl transition group-hover:opacity-100 motion-safe:animate-lamp-breath"
+            style={{ background: "oklch(0.73 0.15 62 / 0.2)" }}
           />
-          …or bring the patient in front of you
-        </span>
-        <span className="relative text-[10px] uppercase tracking-[0.18em] text-neutral-500 transition group-hover:text-ember-300/90">
-          Real patient · resource-aware decision support · prototype
-        </span>
-      </button>
+          <span className="relative flex items-baseline gap-2 font-vignette text-[19px] text-neutral-50">
+            <span
+              aria-hidden
+              className="h-1.5 w-1.5 self-center rounded-full bg-ember-400/90 motion-safe:animate-lamp-breath"
+            />
+            Bring the patient in front of you
+          </span>
+          <span className="relative text-[10px] uppercase tracking-[0.18em] text-ember-300/80">
+            Real patient · resource-aware decision support · prototype
+          </span>
+        </button>
+
+        <button
+          onClick={onBegin}
+          disabled={phase === "loading"}
+          className="group flex flex-col items-center justify-center gap-2 rounded-xl border border-neutral-700 bg-neutral-900/40 px-6 py-6 transition hover:border-neutral-500 hover:bg-neutral-900/70 disabled:opacity-60"
+        >
+          <span className="font-vignette text-[19px] text-neutral-300 transition group-hover:text-neutral-100">
+            {phase === "loading"
+              ? "Opening the case…"
+              : "…or train for that night"}
+          </span>
+          <span className="text-[10px] uppercase tracking-[0.18em] text-neutral-500 transition group-hover:text-neutral-400">
+            Training simulation · play the 02:00 case
+          </span>
+        </button>
+      </div>
 
       {error && (
         <p className="max-w-md rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
