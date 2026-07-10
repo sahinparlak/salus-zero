@@ -673,12 +673,13 @@ export default function App() {
             <button
               type="button"
               onClick={abandonNight}
-              className={`text-[11px] transition ${
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition ${
                 exitArmed
-                  ? "text-amber-300"
-                  : "text-neutral-500 hover:text-neutral-300"
+                  ? "border-amber-500/60 bg-amber-500/10 text-amber-300"
+                  : "border-neutral-700 bg-neutral-900/60 text-neutral-300 hover:border-neutral-500 hover:text-neutral-100"
               }`}
             >
+              <span aria-hidden>{exitArmed ? "⚠" : "↩"}</span>
               {exitArmed
                 ? "Sure? This abandons the night — click again"
                 : "Leave the night"}
