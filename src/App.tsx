@@ -870,7 +870,7 @@ export default function App() {
 
         <footer className="mt-auto pt-8 text-xs text-neutral-600">
           Built for <em>Built with Claude: Life Sciences</em> · clinically
-          reviewed by Dr. Şahin Parlak (Pediatric Surgery).
+          reviewed by Şahin Parlak, MD (Pediatric Surgery).
         </footer>
       </main>
       </>
@@ -2724,8 +2724,8 @@ function ConsultFlow({
                   Validated
                 </span>
                 <span className="text-neutral-300">
-                  Dr. Şahin Parlak, pediatric surgery — read and approved line
-                  by line
+                  Şahin Parlak, MD (pediatric surgery) — read and approved
+                  line by line
                 </span>
                 <span className="pt-px text-[10px] uppercase tracking-wider text-neutral-500">
                   Boundary
