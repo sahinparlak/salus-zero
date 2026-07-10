@@ -1072,8 +1072,7 @@ function ColdOpen({
       )}
 
       <p className="mt-4 max-w-md text-[11px] leading-relaxed tracking-wide text-neutral-600">
-        Training simulation — not medical advice. Doses and thresholds are
-        illustrative.
+        Prototype — not medical advice.
         <span className="ml-2 text-neutral-700">build {__BUILD_REF__}</span>
       </p>
     </main>
