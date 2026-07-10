@@ -7,6 +7,8 @@
 // to reason from THIS reference, not from parametric memory.
 //
 // ════════════════════════════════════════════════════════════════════════════
+//  REFERENCE VERSION: v1 — 10 Jul 2026. The UI provenance card ("Reference
+//  v1", App.tsx chat stage) claims THIS version; bump both together.
 //  STATUS: VALIDATED — read through and approved by Dr. Şahin Parlak
 //  (pediatric surgery), 10 Tem ("okudum, devam"). The Day-2 hard gate (plan
 //  §7) is PASSED. Content provenance: ~half copied from the approved hero

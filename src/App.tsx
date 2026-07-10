@@ -2028,6 +2028,9 @@ function ConsultFlow({
   const [input, setInput] = useState("");
   const [cPhase, setCPhase] = useState<"idle" | "streaming" | "ready">("idle");
   const [cError, setCError] = useState<string | null>(null);
+  // The GROUNDED pill's provenance card (source / validation / boundary +
+  // the domain-library shelf). Render-only; dies with the flow like all else.
+  const [provenanceOpen, setProvenanceOpen] = useState(false);
   const consultAbortRef = useRef<AbortController | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
 
@@ -2671,14 +2674,113 @@ function ConsultFlow({
                   .join(" · ")}
               </div>
             </div>
-            <div className="ml-auto flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-sky-300/90">
+            {/* The GROUNDED pill is the provenance door: source, validation,
+                boundary — and the library shelf. The dashed shelf row below is
+                a POSITION, never an affordance: no "+", no add-verb, no
+                interactivity — a clickable add would read as a working
+                feature, which it is not yet. */}
+            <button
+              type="button"
+              onClick={() => setProvenanceOpen((o) => !o)}
+              aria-expanded={provenanceOpen}
+              aria-controls="provenance-card"
+              title="Why it can say that — source, validation, boundary"
+              className="ml-auto flex items-center gap-1.5 rounded-full border border-sky-500/25 bg-sky-500/10 px-2.5 py-1 text-[10px] uppercase tracking-wider text-sky-300/90 transition hover:border-sky-400/50 hover:bg-sky-500/15"
+            >
               <span
                 aria-hidden
                 className="h-1.5 w-1.5 rounded-full bg-sky-400 motion-safe:animate-pulse"
               />
               grounded
-            </div>
+              <span
+                aria-hidden
+                className={`text-sky-400/70 transition-transform${provenanceOpen ? " rotate-180" : ""}`}
+              >
+                ▾
+              </span>
+            </button>
           </div>
+
+          {provenanceOpen && (
+            <div
+              id="provenance-card"
+              className="rounded-xl border border-sky-500/25 bg-neutral-900/70 px-4 py-3 backdrop-blur motion-safe:animate-reveal-in"
+            >
+              <div className="text-[10px] uppercase tracking-[0.15em] text-neutral-500">
+                Grounding
+              </div>
+              <div className="mt-1 text-sm font-semibold text-neutral-100">
+                Pediatric Appendicitis — Reference v1
+              </div>
+              <div className="mt-2 grid grid-cols-[72px_1fr] gap-x-3 gap-y-1.5 text-xs leading-relaxed">
+                <span className="pt-px text-[10px] uppercase tracking-wider text-neutral-500">
+                  Source
+                </span>
+                <span className="text-neutral-300">
+                  Holcomb &amp; Ashcraft's Pediatric Surgery, 8th ed. — Ch. 40,
+                  Appendicitis in Children
+                </span>
+                <span className="pt-px text-[10px] uppercase tracking-wider text-neutral-500">
+                  Validated
+                </span>
+                <span className="text-neutral-300">
+                  Dr. Şahin Parlak, pediatric surgery — read and approved line
+                  by line
+                </span>
+                <span className="pt-px text-[10px] uppercase tracking-wider text-neutral-500">
+                  Boundary
+                </span>
+                <span className="text-neutral-300">
+                  Answers from this document only. Where it is silent, it says
+                  so.
+                </span>
+              </div>
+              <div className="my-3 border-t border-neutral-800" />
+              <div className="text-[10px] uppercase tracking-[0.15em] text-neutral-500">
+                The library
+              </div>
+              <p className="mt-1.5 font-vignette text-[15px] italic leading-snug text-ember-300/90">
+                The engine takes domain references as data; appendicitis is the
+                first validated domain.
+              </p>
+              <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-[13px] text-sky-200">
+                <span className="text-[10px] tabular-nums text-sky-300/70">
+                  01 ·
+                </span>
+                <span
+                  aria-hidden
+                  className="h-1.5 w-1.5 rounded-full bg-sky-400"
+                />
+                Pediatric appendicitis
+                <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-sky-300/80">
+                  validated · v1
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-dashed border-neutral-700 px-3 py-2 text-[13px] text-neutral-500">
+                <span className="text-[10px] tabular-nums text-neutral-600">
+                  02 ·
+                </span>
+                <span
+                  aria-hidden
+                  className="h-1.5 w-1.5 rounded-full border border-neutral-600"
+                />
+                Next domain
+                <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-neutral-600">
+                  coming · expert-authored
+                </span>
+              </div>
+              <p className="mt-2.5 text-xs leading-relaxed text-neutral-400">
+                A new domain earns this light the way appendicitis did: an
+                expert authors its reference, it is validated line by line,
+                red-teamed for its own failure modes, and versioned like a
+                study.{" "}
+                <span className="text-neutral-200">
+                  Never a free-text upload
+                </span>{" "}
+                — grounding anyone can paste in isn't grounding.
+              </p>
+            </div>
+          )}
 
           {role === "Student" && (
             <p className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs leading-relaxed text-sky-200">
