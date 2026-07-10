@@ -2743,8 +2743,8 @@ function ConsultFlow({
                         against the reference…
                       </p>
                     ) : (
-                      <div className="whitespace-pre-wrap font-vignette text-[16px] leading-relaxed text-neutral-200">
-                        {m.text}
+                      <div>
+                        <ConsultProse text={m.text} />
                         {cPhase === "streaming" && i === messages.length - 1 && (
                           <span
                             aria-hidden
@@ -2800,5 +2800,227 @@ function ConsultFlow({
         </section>
       )}
     </main>
+  );
+}
+
+// ── ConsultProse: the companion's streamed plain text, rendered as a clinical
+// layout. The model keeps streaming prose (nothing structured on the wire);
+// the CLIENT parses the format contract — "(iii) Title:" move lines, "- "
+// bullets, "1." steps, "= N/10" score lines, **bold** — and draws the face:
+// section headers, score meters, a tick-off worklist. Same philosophy as the
+// hero: the model narrates, the instruments are drawn by code. Parsing runs
+// on the full accumulated text every render, so it is streaming-safe.
+
+interface ProseBlock {
+  kind: "para" | "bullet" | "step";
+  text: string;
+  n?: number;
+}
+interface ProseSection {
+  num?: string;
+  title?: string;
+  blocks: ProseBlock[];
+  scores: { name: string; value: number }[];
+}
+
+const MOVE_LINE_RE = /^\*{0,2}\((i{1,3}|iv|vi?)\)\*{0,2}\s*(.*)$/;
+const SCORE_LINE_RE = /\b(PAS|Alvarado)\b[^\n]*?=?\s*\*{0,2}(\d{1,2})\s*\/\s*10/i;
+
+function parseConsultProse(text: string): ProseSection[] {
+  const sections: ProseSection[] = [{ blocks: [], scores: [] }];
+  const cur = () => sections[sections.length - 1];
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const mv = MOVE_LINE_RE.exec(line);
+    if (mv) {
+      let rest = mv[2].trim();
+      let title = rest;
+      let content = "";
+      // Split "Title: content" / "Title — content" (first separator within
+      // a title-plausible distance).
+      const cands = [rest.indexOf(":"), rest.indexOf("—")].filter(
+        (x) => x > -1 && x < 60,
+      );
+      if (cands.length) {
+        const idx = Math.min(...cands);
+        title = rest.slice(0, idx);
+        content = rest.slice(idx + 1).trim();
+      }
+      title = title.replace(/\*\*/g, "").replace(/[:—–]\s*$/, "").trim();
+      sections.push({ num: mv[1], title, blocks: [], scores: [] });
+      const cleaned = content.replace(/^\*+\s*/, "").trim();
+      if (cleaned) cur().blocks.push({ kind: "para", text: cleaned });
+    } else {
+      const bullet = /^[-•]\s+(.*)$/.exec(line);
+      const step = /^(\d{1,2})[.)]\s+(.*)$/.exec(line);
+      if (bullet) cur().blocks.push({ kind: "bullet", text: bullet[1] });
+      else if (step)
+        cur().blocks.push({ kind: "step", n: parseInt(step[1], 10), text: step[2] });
+      else cur().blocks.push({ kind: "para", text: line });
+    }
+
+    // A score total stated on this line feeds the section's meter
+    // (last statement of a given score wins).
+    const sc = SCORE_LINE_RE.exec(line);
+    if (sc) {
+      const name = sc[1].toUpperCase() === "PAS" ? "PAS" : "Alvarado";
+      const value = parseInt(sc[2], 10);
+      if (value <= 10) {
+        const scores = cur().scores.filter((s) => s.name !== name);
+        scores.push({ name, value });
+        cur().scores = scores;
+      }
+    }
+  }
+  return sections.filter((s) => s.num || s.blocks.length > 0);
+}
+
+// **bold** → styled emphasis; an unclosed ** while streaming stays plain.
+function inlineBold(t: string) {
+  const parts = t.split("**");
+  const closed = parts.length % 2 === 1;
+  return parts.map((p, i) =>
+    i % 2 === 1 && (closed || i < parts.length - 1) ? (
+      <strong key={i} className="font-semibold text-neutral-100">
+        {p}
+      </strong>
+    ) : (
+      p
+    ),
+  );
+}
+
+// Low is deliberately NEUTRAL, never green — a low score must not read as
+// reassurance (the false-relief lesson). Equivocal amber, high red.
+function ScoreMeter({ name, value }: { name: string; value: number }) {
+  const v = Math.max(0, Math.min(10, value));
+  const high = v >= 7;
+  const mid = name === "Alvarado" ? v >= 4 && v < 7 : v >= 3 && v < 7;
+  const fill = high
+    ? "border-red-400 bg-red-400/80"
+    : mid
+      ? "border-amber-400 bg-amber-400/80"
+      : "border-neutral-400 bg-neutral-400/70";
+  const band = high ? "high" : mid ? "equivocal" : "low";
+  return (
+    <div className="my-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+      <span className="w-16 text-[11px] uppercase tracking-wider text-neutral-500">
+        {name}
+      </span>
+      <span className="flex gap-[3px]" aria-hidden>
+        {Array.from({ length: 10 }, (_, i) => (
+          <span
+            key={i}
+            className={`h-2.5 w-3 rounded-[2px] border ${
+              i < v ? fill : "border-neutral-700"
+            }`}
+          />
+        ))}
+      </span>
+      <span className="text-[12px] tabular-nums text-neutral-300">
+        {v}/10 · {band}
+      </span>
+    </div>
+  );
+}
+
+function ConsultProse({ text }: { text: string }) {
+  const sections = parseConsultProse(text);
+  // Tick-off worklist state — per message, ephemeral like everything else.
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setTicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      {sections.map((sec, si) => {
+        const accent =
+          sec.num === "iii"
+            ? "border-l-2 border-amber-500/50 pl-3"
+            : sec.num === "iv"
+              ? "border-l-2 border-red-500/60 pl-3"
+              : "";
+        return (
+          <div key={si} className={`flex flex-col gap-1.5 ${accent}`}>
+            {sec.num && (
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[11px] text-neutral-600">
+                  ({sec.num})
+                </span>
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-neutral-400">
+                  {sec.title}
+                </span>
+              </div>
+            )}
+            {sec.scores.map((s) => (
+              <ScoreMeter key={s.name} name={s.name} value={s.value} />
+            ))}
+            {sec.blocks.map((b, bi) => {
+              if (b.kind === "bullet")
+                return (
+                  <div
+                    key={bi}
+                    className="flex gap-2 text-[14.5px] leading-relaxed text-neutral-300"
+                  >
+                    <span aria-hidden className="mt-[1px] text-neutral-600">
+                      •
+                    </span>
+                    <span>{inlineBold(b.text)}</span>
+                  </div>
+                );
+              if (b.kind === "step") {
+                const key = `${si}-${bi}`;
+                const done = ticked.has(key);
+                return (
+                  <button
+                    key={bi}
+                    onClick={() => toggle(key)}
+                    className="group flex items-start gap-2.5 text-left"
+                    title={done ? "Mark as not done" : "Mark as done"}
+                  >
+                    <span
+                      className={`mt-0.5 grid h-5 w-5 flex-none place-items-center rounded-full border text-[11px] tabular-nums transition ${
+                        done
+                          ? "border-neutral-700 text-neutral-600"
+                          : "border-ember-500/60 text-ember-300 group-hover:border-ember-400"
+                      }`}
+                    >
+                      {done ? "✓" : b.n}
+                    </span>
+                    <span
+                      className={`text-[14.5px] leading-relaxed transition ${
+                        done ? "text-neutral-600 line-through" : "text-neutral-200"
+                      }`}
+                    >
+                      {inlineBold(b.text)}
+                    </span>
+                  </button>
+                );
+              }
+              const closer = /verify, you decide/i.test(b.text);
+              return (
+                <p
+                  key={bi}
+                  className={
+                    closer
+                      ? "font-vignette text-[15px] italic leading-relaxed text-ember-300/90"
+                      : "font-vignette text-[15.5px] leading-relaxed text-neutral-200"
+                  }
+                >
+                  {inlineBold(b.text)}
+                </p>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
   );
 }
