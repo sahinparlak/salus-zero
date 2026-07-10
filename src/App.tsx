@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+// Value import across the worker boundary — deliberate and leak-audited: the
+// scorer holds only chip labels, component names, and band strings (all
+// already public UI text). It must NEVER grow an import of the reference or
+// prompts; the build leak-grep pins this.
+import { computeAlvarado, computePas } from "../functions/lib/consultScore";
 // Type-only import: erased at build time, so nothing from functions/ ever
 // enters the client bundle. The data itself arrives via GET /api/case.
 import type { PublicCase } from "../functions/lib/caseSpec";
@@ -205,6 +210,11 @@ export default function App() {
   const [showReferralConfirm, setShowReferralConfirm] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  // Two-step exit from a running night (leaving mid-case is destructive —
+  // the persisted session is erased — so it never happens in one click,
+  // same doctrine as the referral confirm strip). Arms for 4s, then relaxes.
+  const [exitArmed, setExitArmed] = useState(false);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // ── Section 2 (consult companion) — the ONLY App-level state it owns. All
   // consult data lives inside <ConsultFlow/> and dies with it on unmount:
   // PHI is ephemeral by construction, nothing consult ever touches
@@ -304,6 +314,38 @@ export default function App() {
         return next;
       });
     }
+  }
+
+  // Leave the running night and return to the landing screen. Without this
+  // there was NO way back from a live case — even a refresh resumed it from
+  // localStorage (his live find, 11 Tem). Aborts any in-flight stream first;
+  // AbortError paths write no state, so the reset below is never overridden.
+  function abandonNight() {
+    if (!exitArmed) {
+      setExitArmed(true);
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+      exitTimerRef.current = setTimeout(() => setExitArmed(false), 4000);
+      return;
+    }
+    if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+    setExitArmed(false);
+    abortRef.current?.abort();
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    setCaseData(null);
+    setTranscript([]);
+    setSim(null);
+    setOrderedLog([]);
+    setVitalsLog([]);
+    setDebrief(null);
+    setDebriefPhase("idle");
+    setShowReferralConfirm(false);
+    setError(null);
+    setInput("");
+    setPhase("idle");
   }
 
   async function beginCase() {
@@ -624,17 +666,34 @@ export default function App() {
               The nearest CT is four hours away. The nearest surgeon is you.
             </p>
           </div>
-          {caseData && sim && (
-            // On phones the clock lives in the sticky MobileVitalsStrip; the
-            // header clock only shows md+ (where title + clock share a line,
-            // so justify-between right-aligns it instead of stranding it).
-            <div className="hidden md:block">
-              <Clock
-                elapsedMin={sim.elapsedMin}
-                referralStartedAtMin={sim.referralStartedAtMin}
-              />
-            </div>
-          )}
+          <div className="flex flex-col items-end gap-1.5">
+            {/* The way OUT of a running night — two clicks, like every other
+                destructive act in this app. Also the way home after debrief. */}
+            <button
+              type="button"
+              onClick={abandonNight}
+              className={`text-[11px] transition ${
+                exitArmed
+                  ? "text-amber-300"
+                  : "text-neutral-500 hover:text-neutral-300"
+              }`}
+            >
+              {exitArmed
+                ? "Sure? This abandons the night — click again"
+                : "Leave the night"}
+            </button>
+            {caseData && sim && (
+              // On phones the clock lives in the sticky MobileVitalsStrip; the
+              // header clock only shows md+ (where title + clock share a line,
+              // so justify-between right-aligns it instead of stranding it).
+              <div className="hidden md:block">
+                <Clock
+                  elapsedMin={sim.elapsedMin}
+                  referralStartedAtMin={sim.referralStartedAtMin}
+                />
+              </div>
+            )}
+          </div>
         </header>
 
         {error && (
@@ -2260,6 +2319,36 @@ function ConsultFlow({
   const noUS = !resources.includes("Ultrasound");
   const noSurgeon = !resources.includes("Surgeon on site");
 
+  // LIVE code-computed scores — the instrument reacts the moment a chip or a
+  // lab value changes, no model round-trip. Same deterministic functions the
+  // worker uses (single source); the model's reply only ever EXPLAINS these.
+  const liveIntake = {
+    name: "",
+    ageYears: ageValid ? age : 0,
+    sex: sex === "" ? ("male" as const) : sex,
+    complaint: "",
+    complaintChips: complaints,
+    examFindings,
+    resources,
+    transferTimeMin: null,
+    labs: {
+      wbcK: parseLabNum(labWbc, 0, 200),
+      neutPct: parseLabNum(labNeut, 0, 100),
+      tempC: parseLabNum(labTemp, 30, 45),
+    },
+    clinicianRole: "",
+    clinicianName: "",
+  };
+  const livePas = computePas(liveIntake);
+  const liveAlv = computeAlvarado(liveIntake);
+  // LOW IS NEVER GREEN: neutral below, amber equivocal, red alarm high.
+  const liveTone = (total: number, hi: number, mid: number) =>
+    total >= hi
+      ? "text-red-300"
+      : total >= mid
+        ? "text-amber-300/90"
+        : "text-neutral-300";
+
   return (
     <main className="mx-auto flex min-h-[100svh] w-full max-w-xl flex-col px-5 py-6">
       <div className="mb-5 flex items-baseline justify-between gap-3">
@@ -2810,6 +2899,28 @@ function ConsultFlow({
             })}
             <span className="text-[10px] text-neutral-600">
               sent with your next message
+            </span>
+            {/* Live readout: computed IN CODE from the ticked chips + labs,
+                updates on every keystroke — the model never touches these
+                numbers, it only explains them in its replies. */}
+            <span className="ml-auto flex items-center gap-2 font-mono text-[11px] tabular-nums">
+              <span className="text-[10px] uppercase tracking-wider text-neutral-600">
+                live · code
+              </span>
+              <span
+                className={
+                  livePas.computable ? liveTone(livePas.total, 7, 3) : "text-neutral-600"
+                }
+              >
+                PAS {livePas.computable ? `${livePas.total}/10` : "—"}
+              </span>
+              <span
+                className={
+                  liveAlv.computable ? liveTone(liveAlv.total, 7, 4) : "text-neutral-600"
+                }
+              >
+                Alvarado {liveAlv.computable ? `${liveAlv.total}/10` : "—"}
+              </span>
             </span>
           </div>
 
