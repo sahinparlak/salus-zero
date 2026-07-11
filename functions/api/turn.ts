@@ -197,24 +197,36 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   // the whole loop is playable end-to-end without an Anthropic call.
   if (!apiKey) return streamMock(parsed.intent, resolution, headers);
 
-  const upstream = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: ctx.env.MODEL_ID || "claude-sonnet-5",
-      max_tokens: 1024,
-      stream: true,
-      // Turn calls narrate fast: keep thinking off. On Sonnet 5, omitting
-      // `thinking` would silently run adaptive and add latency.
-      thinking: { type: "disabled" },
-      system,
-      messages,
-    }),
-  });
+  // A thrown fetch (DNS/TLS/connection reset) would otherwise surface as
+  // Cloudflare's raw 1101 error page — return the same in-world 502 the
+  // non-ok branch already uses.
+  let upstream: Response;
+  try {
+    upstream = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: ctx.env.MODEL_ID || "claude-sonnet-5",
+        max_tokens: 1024,
+        stream: true,
+        // Turn calls narrate fast: keep thinking off. On Sonnet 5, omitting
+        // `thinking` would silently run adaptive and add latency.
+        thinking: { type: "disabled" },
+        system,
+        messages,
+      }),
+    });
+  } catch (err) {
+    console.error(`turn upstream fetch failed: ${(err as Error).message}`);
+    return new Response("the world engine is unreachable — try the turn again", {
+      status: 502,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
 
   if (!upstream.ok || !upstream.body) {
     // Detail goes to the worker log only — raw upstream error bodies are not

@@ -169,25 +169,37 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   // 502 if the retry itself fails.
   let model: DebriefModelOutput | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const upstream = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: ctx.env.MODEL_ID || "claude-sonnet-5",
-        max_tokens: 12000,
-        thinking: { type: "adaptive" },
-        output_config: {
-          effort: "high",
-          format: { type: "json_schema", schema: DEBRIEF_OUTPUT_SCHEMA },
+    // A thrown fetch (DNS/TLS/connection reset) gets the same treatment as
+    // a non-ok status below — without the catch it would surface as
+    // Cloudflare's raw 1101 error page instead of the client's retry UI.
+    let upstream: Response;
+    try {
+      upstream = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
         },
-        system: DEBRIEF_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userMessage }],
-      }),
-    });
+        body: JSON.stringify({
+          model: ctx.env.MODEL_ID || "claude-sonnet-5",
+          max_tokens: 12000,
+          thinking: { type: "adaptive" },
+          output_config: {
+            effort: "high",
+            format: { type: "json_schema", schema: DEBRIEF_OUTPUT_SCHEMA },
+          },
+          system: DEBRIEF_SYSTEM_PROMPT,
+          messages: [{ role: "user", content: userMessage }],
+        }),
+      });
+    } catch (err) {
+      console.error(`debrief upstream fetch failed: ${(err as Error).message}`);
+      if (model) break; // serve the garbled-but-whole first attempt
+      return new Response("The attending could not be reached — try again", {
+        status: 502,
+      });
+    }
 
     if (!upstream.ok) {
       // Detail goes to the worker log only — raw upstream error bodies are

@@ -147,31 +147,44 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   // whole flow is demoable offline without an Anthropic call.
   if (!apiKey) return streamMock(parsed.intent, headers);
 
-  const upstream = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: ctx.env.MODEL_ID || "claude-sonnet-5",
-      // The full 6-move opening for a rich case runs long; 1800 truncated
-      // before the prototype/"verify, you decide" close (curl checkpoint,
-      // Day 1). Headroom so the safety close always lands. (Verbosity of the
-      // opening is a Day-3 prompt-tuning item, not a ceiling problem.)
-      // Sized to the prompt's word budgets (~350-word opening, ~120-word
-      // follow-ups) with generous margin — small enough to backstop verbosity.
-      max_tokens: 1400,
-      stream: true,
-      // Grounding comes from the reference, not from long deliberation — keep
-      // thinking off for the fastest first token. On Sonnet 5, omitting
-      // `thinking` would silently run adaptive and add latency.
-      thinking: { type: "disabled" },
-      system,
-      messages,
-    }),
-  });
+  // A thrown fetch (DNS/TLS/connection reset) would otherwise surface as
+  // Cloudflare's raw 1101 error page. PHI SAFETY: log a fixed string only —
+  // like the non-ok branch, never anything derived from the request.
+  let upstream: Response;
+  try {
+    upstream = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: ctx.env.MODEL_ID || "claude-sonnet-5",
+        // The full 6-move opening for a rich case runs long; 1800 truncated
+        // before the prototype/"verify, you decide" close (curl checkpoint,
+        // Day 1). Headroom so the safety close always lands. (Verbosity of
+        // the opening is a Day-3 prompt-tuning item, not a ceiling problem.)
+        // Sized to the prompt's word budgets (~350-word opening, ~120-word
+        // follow-ups) with generous margin — small enough to backstop
+        // verbosity.
+        max_tokens: 1400,
+        stream: true,
+        // Grounding comes from the reference, not from long deliberation —
+        // keep thinking off for the fastest first token. On Sonnet 5,
+        // omitting `thinking` would silently run adaptive and add latency.
+        thinking: { type: "disabled" },
+        system,
+        messages,
+      }),
+    });
+  } catch {
+    console.error("consult upstream fetch failed");
+    return new Response("the companion is unreachable — try again", {
+      status: 502,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
 
   if (!upstream.ok || !upstream.body) {
     // PHI SAFETY: log ONLY the status — never the request/intake body, and not
