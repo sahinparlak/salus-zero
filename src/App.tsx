@@ -601,7 +601,8 @@ export default function App() {
     if (sim?.caseOver && phase === "ready" && debriefPhase === "idle") {
       void fetchDebrief();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps are the three gates only — fetchDebrief is deliberately omitted
+    // (recreated every render; listing it would refire the effect).
   }, [sim?.caseOver, phase, debriefPhase]);
 
   // One file with everything a reshoot needs: every input the player typed,
@@ -1892,7 +1893,8 @@ function ScoreGauge({ score }: { score: number }) {
       cancelAnimationFrame(rafSweep);
       cancelAnimationFrame(rafCount);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Re-animate on `target` alone — the display value is animation state,
+    // not a dependency.
   }, [target]);
 
   return (
