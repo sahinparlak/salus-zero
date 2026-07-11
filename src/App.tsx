@@ -303,17 +303,26 @@ export default function App() {
   async function streamInto(res: Response) {
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const delta = decoder.decode(value, { stream: true });
+    const append = (delta: string) => {
+      if (!delta) return;
       setTranscript((prev) => {
+        const last = prev[prev.length - 1];
+        // A chunk landing after a reset cleared the transcript must not
+        // materialize a ghost entry (post-reset whitescreen, live find).
+        if (!last) return prev;
         const next = [...prev];
-        const last = next[next.length - 1];
         next[next.length - 1] = { ...last, text: last.text + delta };
         return next;
       });
+    };
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      append(decoder.decode(value, { stream: true }));
     }
+    // Flush the decoder's tail: a multi-byte character split across the
+    // final chunk boundary would otherwise drop the last glyph.
+    append(decoder.decode());
   }
 
   // Leave the running night and return to the landing screen. Without this
@@ -1125,6 +1134,8 @@ function DecisionBox({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
+              // An Enter that confirms an IME composition must not act.
+              if (e.nativeEvent.isComposing) return;
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 if (!disabled && input.trim()) onSend();
@@ -2177,17 +2188,26 @@ function ConsultFlow({
   async function streamConsult(res: Response) {
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const delta = decoder.decode(value, { stream: true });
+    const append = (delta: string) => {
+      if (!delta) return;
       setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        // A chunk landing after a reset cleared the chat must not
+        // materialize a ghost message (same guard as the hero's reader).
+        if (!last) return prev;
         const next = [...prev];
-        const last = next[next.length - 1];
         next[next.length - 1] = { ...last, text: last.text + delta };
         return next;
       });
+    };
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      append(decoder.decode(value, { stream: true }));
     }
+    // Flush the decoder's tail: a multi-byte character split across the
+    // final chunk boundary would otherwise drop the last glyph.
+    append(decoder.decode());
     // The server streams straight through (no buffering), so the dose check
     // can only run on the COMPLETED text — an honest post-hoc flag.
     setMessages((prev) => {
@@ -3196,6 +3216,8 @@ function ConsultFlow({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
+                  // An Enter that confirms an IME composition must not send.
+                  if (e.nativeEvent.isComposing) return;
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     if (cPhase === "ready" && input.trim()) void sendConsult();
