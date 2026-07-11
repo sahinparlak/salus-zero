@@ -16,8 +16,10 @@ import { clampClock, maxClockOf } from "./stage";
 // A completed order: the action id and the sim-minute its outcome existed.
 // Lab strings are snapshotted at atMin, so a result never silently "updates"
 // to a later stage's values — re-ordering is the only way to get serial labs.
+// The id length cap is defensive (real ids are short slugs); the endpoints
+// additionally drop any id that is not in the case's action catalog.
 export const OrderedEntrySchema = z.object({
-  id: z.string(),
+  id: z.string().max(64),
   atMin: z.number().finite(),
 });
 export type OrderedEntry = z.infer<typeof OrderedEntrySchema>;

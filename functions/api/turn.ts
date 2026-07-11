@@ -124,15 +124,20 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     if (parsed.referralStartedAtMin !== null || clamped >= maxClockOf(spec)) {
       return new Response("The case has already ended", { status: 409 });
     }
-    // Sanitize the client-held log: cap the size (never a hard lock) and
-    // clamp every sample time to the current clock — a forged future atMin
-    // would otherwise pull future-stage lab strings into the prompt.
-    // Keep the OLDEST entries, matching debrief.ts: the earliest orders
-    // carry the differential credit and the referral decision minute, and
-    // the client replaces its log with this one every turn — a keep-newest
-    // window here would slowly evict them on a spam night and make the
-    // blind-commit check fire against a play that did examine.
+    // Sanitize the client-held log: drop ids the case never issued (the
+    // same catalog check clickedActions gets — a forged "__proto__" or junk
+    // id must never reach the prompt or the score), cap the size (never a
+    // hard lock) and clamp every sample time to the current clock — a
+    // forged future atMin would otherwise pull future-stage lab strings
+    // into the prompt. Keep the OLDEST entries, matching debrief.ts: the
+    // earliest orders carry the differential credit and the referral
+    // decision minute, and the client replaces its log with this one every
+    // turn — a keep-newest window here would slowly evict them on a spam
+    // night and make the blind-commit check fire against a play that did
+    // examine.
+    const catalogIds = new Set(spec.actionCatalog.map((a) => a.id));
     const safeLog = parsed.orderedLog
+      .filter((e) => catalogIds.has(e.id))
       .slice(0, 200)
       .map((e) => ({ id: e.id, atMin: clampClock(e.atMin, clamped) }));
     resolution = resolveTurn(spec, {

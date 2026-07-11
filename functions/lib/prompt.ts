@@ -125,7 +125,12 @@ function formatOrderedLabs(
   const lines = orderedLog
     .map((entry) => {
       const snapshot = stageOf(spec, entry.atMin);
-      const result = snapshot.labs[entry.id];
+      // Own-property check: a bare lookup would resolve prototype keys
+      // ("constructor", …) to truthy junk and stringify it into the prompt.
+      // The endpoints already drop non-catalog ids; this is defense in depth.
+      const result = Object.hasOwn(snapshot.labs, entry.id)
+        ? snapshot.labs[entry.id]
+        : undefined;
       if (!result) return null;
       const label =
         spec.actionCatalog.find((a) => a.id === entry.id)?.label ?? entry.id;

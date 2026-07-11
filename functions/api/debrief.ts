@@ -132,10 +132,13 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     return new Response("The case is not over yet", { status: 409 });
   }
 
-  // Same sanitation as /api/turn, but keep the FIRST 200 entries: the
-  // earliest orders carry the differential credit and the referral decision
-  // minute (a legitimate night can't reach 200 anyway — this is anti-abuse).
+  // Same sanitation as /api/turn: catalog-validated ids only (a forged id
+  // must never reach the score or the debrief prompt), FIRST 200 entries —
+  // the earliest orders carry the differential credit and the referral
+  // decision minute (a legitimate night can't reach 200 anyway).
+  const catalogIds = new Set(spec.actionCatalog.map((a) => a.id));
   const safeLog = parsed.orderedLog
+    .filter((e) => catalogIds.has(e.id))
     .slice(0, 200)
     .map((e) => ({ id: e.id, atMin: clampClock(e.atMin, elapsed) }));
   const referralStartedAtMin =
