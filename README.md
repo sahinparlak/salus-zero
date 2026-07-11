@@ -56,8 +56,10 @@ pnpm build                          # build the frontend into dist/
 pnpm preview                        # serves dist/ + functions with your key
 ```
 
-Open the printed URL and press **Run**. Without a key the endpoint streams a
-local mock, so you can verify the transport before wiring the real call.
+Open the printed URL and pick a door — **Bring the patient in front of you**
+(the consult companion) or **train for that night** (the scored simulator).
+Without a key the endpoints stream a local mock, so you can verify the
+transport before wiring the real call.
 
 ## Deploy (Cloudflare Pages)
 
@@ -71,7 +73,7 @@ pnpm deploy
 ## Clinical safety
 
 **This is a training simulation, not medical advice.** All doses and thresholds
-shown are illustrative. Clinically reviewed by Dr. Şahin Parlak (Pediatric
+shown are illustrative. Clinically reviewed by Şahin Parlak, MD (Pediatric
 Surgery).
 
 ## License

@@ -8,7 +8,7 @@ in Turkish (the working language of the build); one line each in English:
 | File | What it is |
 |---|---|
 | [FELSEFE.md](FELSEFE.md) | The design philosophy: *built for the model's fallibility, not its intelligence* — the thesis, the living table of refusals in the product, and the honest-gap log: the score arithmetic that was caught living in the model, then moved into code. |
-| [GUN1-KLINIK-ONAY.md](GUN1-KLINIK-ONAY.md) | Dated clinical approval log — Dr. Şahin Parlak (Pediatric Surgery) reviewed and signed off the hero case's clinical content, 15/15 items, with dated addenda (incl. the 2026-07-11 ruling removing DKA from the appendicitis differential). |
+| [GUN1-KLINIK-ONAY.md](GUN1-KLINIK-ONAY.md) | Dated clinical approval log — Şahin Parlak, MD (Pediatric Surgery) reviewed and signed off the hero case's clinical content, 15/15 items, with dated addenda (incl. the 2026-07-11 ruling removing DKA from the appendicitis differential). |
 | [GUN2-KOD-INCELEME.md](GUN2-KOD-INCELEME.md) | Day-2 core-loop code review: playtests, forgery attempts against the turn API, and the fixes they forced. |
 | [GUN3-KOD-INCELEME.md](GUN3-KOD-INCELEME.md) | Day-3 review of the debrief + scoring layer: a 53-agent adversarial workflow across 6 lenses; 23 deduplicated findings, each independently verified. |
 | [GUN3-SKOR-ONAY.md](GUN3-SKOR-ONAY.md) | Scoring-weights approval log — the 0–100 rubric (referral timing / resource discipline / differential workup) approved item by item by the reviewing physician, including the blind-commit penalty ruling. |
