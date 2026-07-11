@@ -114,7 +114,7 @@ function debriefResponse(
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   // The most expensive call in the product, and a legitimate player needs
   // exactly ONE per night (the UI retry stays comfortable inside 3/min).
-  if (rateLimited(ctx.request, 3)) return tooManyRequests();
+  if (rateLimited(ctx.request, 3, "debrief")) return tooManyRequests();
 
   let parsed: z.infer<typeof DebriefRequestSchema>;
   try {

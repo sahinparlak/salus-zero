@@ -74,7 +74,7 @@ const ConsultRequestSchema = z.object({
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   // A clinician composing follow-ups cannot approach 10/min; a curl loop can.
-  if (rateLimited(ctx.request, 10)) return tooManyRequests();
+  if (rateLimited(ctx.request, 10, "consult")) return tooManyRequests();
 
   let parsed: z.infer<typeof ConsultRequestSchema>;
   try {

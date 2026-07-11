@@ -83,7 +83,7 @@ function stateHeader(spec: Parameters<typeof stageOf>[0], res: TurnResolution) {
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   // A real turn takes tens of seconds to read and answer; 10/min/address is
   // far above any human play and far below a wallet-drain loop.
-  if (rateLimited(ctx.request, 10)) return tooManyRequests();
+  if (rateLimited(ctx.request, 10, "turn")) return tooManyRequests();
 
   let parsed: z.infer<typeof TurnRequestSchema>;
   try {

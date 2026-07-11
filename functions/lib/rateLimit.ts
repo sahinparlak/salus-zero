@@ -11,16 +11,24 @@
 
 const WINDOW_MS = 60_000;
 
-// requester key -> request timestamps inside the current window.
+// scope:requester -> request timestamps inside the current window. All three
+// endpoints share this module instance in the Pages worker bundle, so the
+// scope MUST be part of the key: without it a night of /api/turn calls
+// would eat the debrief's tighter budget and 429 the one legitimate
+// debrief at the finish line (caught by the section-B curl verification).
 const buckets = new Map<string, number[]>();
 
-// True when this request pushes the caller past `limit` per minute. The
-// refused request is NOT counted — a client that backs off recovers after
-// one quiet window instead of re-arming its own block forever.
-export function rateLimited(request: Request, limit: number): boolean {
+// True when this request pushes the caller past `limit` per minute for this
+// scope. The refused request is NOT counted — a client that backs off
+// recovers after one quiet window instead of re-arming its own block forever.
+export function rateLimited(
+  request: Request,
+  limit: number,
+  scope: string,
+): boolean {
   // Behind Cloudflare this header is always the real client address; the
   // fallback only exists for local `wrangler pages dev`.
-  const key = request.headers.get("cf-connecting-ip") ?? "local";
+  const key = `${scope}:${request.headers.get("cf-connecting-ip") ?? "local"}`;
   const now = Date.now();
   const recent = (buckets.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
   if (recent.length >= limit) {
