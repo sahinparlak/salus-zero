@@ -6,8 +6,8 @@
 > peritonit/omental infarkt eklendi, gastroenterit + mezenterik adenit okul-çağı
 > için öne alındı. Bu plandaki DKA'ya dayalı mimik/demo pasajları (satır 67, 122,
 > 190, 209) ARTIK GEÇERSİZDİR — şipe edilen araç DKA kullanmıyor. Ayrıntı ve
-> gerekçe: `docs/GUN1-KLINIK-ONAY.md` EK (2026-07-11). Video anlatısı
-> (`VIDEO-KONUSMA.md`) da DKA'dan söz ediyor — çekimden önce güncellenmeli.
+> gerekçe: `docs/GUN1-KLINIK-ONAY.md` EK (2026-07-11). Video anlatısı da
+> DKA'dan söz ediyordu — çekimden önce güncellenmeli (senaryo repo dışında tutuluyor).
 
 ---
 
