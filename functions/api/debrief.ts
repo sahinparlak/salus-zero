@@ -64,9 +64,15 @@ const DebriefModelOutputSchema = z.object({
 // pathway…"), a period-glued fragment ("suspicion.this is…"), a truncated
 // trailing token ("…not after it.eq"). One retry when a signature matches;
 // the second attempt is served regardless — the gate must never block.
-const ABBREVIATIONS = new Set(["a.m", "p.m", "e.g", "i.e", "etc", "vs", "dr", "st"]);
+//
+// Entries are the LETTER-ONLY piece the regexes below actually capture:
+// both capture groups stop at letters, so a dotted entry like "a.m" could
+// never match anything (the original dotted set was dead code — a debrief
+// ending "…before 3 a.m" tripped the tail check). "m" covers a.m/p.m, "g"
+// covers e.g, "e" covers i.e.
+const ABBREVIATIONS = new Set(["m", "g", "e", "etc", "vs", "dr", "st"]);
 
-// Exported for the (uncommitted) test battery only.
+// Exported for the test battery (tests/debrief.test.ts) only.
 export function looksGarbled(out: DebriefModelOutput): boolean {
   const texts = [
     out.groundTruthReveal,
