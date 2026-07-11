@@ -44,6 +44,8 @@ The engine is live and plays end to end. Two doors share it:
   ([`functions/lib/consultScore.ts`](functions/lib/consultScore.ts)) and handed
   to the model as data.
 
+![The consult companion reading a real intake: PAS and Alvarado computed in code with their arithmetic shown line by line, an intake-inconsistency stamp, and the mimic board — what else is not yet excluded, each with a way to rule it out using only what the clinic has](docs/img/consult-face.png)
+
 **Architecture, in five lines.** The browser talks only to Cloudflare Pages
 Functions (`/api/*`); each function builds the prompt, calls Anthropic, and
 relays the SSE stream back as plain text. Everything secret — the hidden
