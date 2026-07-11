@@ -22,6 +22,7 @@ import {
   type DebriefModelOutput,
 } from "../lib/debriefPrompt";
 import { OrderedEntrySchema } from "../lib/loop";
+import { rateLimited, tooManyRequests } from "../lib/rateLimit";
 import { computeScore, type ScoreResult } from "../lib/score";
 import { clampClock, maxClockOf } from "../lib/stage";
 
@@ -30,9 +31,15 @@ interface Env {
   MODEL_ID?: string;
 }
 
+// Sized to a real night, not to the theoretical maximum: a world beat is
+// ~160 words and a player entry is capped typed text + the composed system
+// bracket, so no legitimate single entry approaches 3000 chars — and a
+// played-to-the-end night stays well under 80 entries. Anything bigger is
+// someone feeding the expensive call a synthetic transcript (this is the
+// costliest endpoint: 12k max_tokens, adaptive thinking, up to 2 attempts).
 const HistoryMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
-  content: z.string().min(1).max(6000),
+  content: z.string().min(1).max(3000),
 });
 
 const DebriefRequestSchema = z.object({
@@ -42,7 +49,7 @@ const DebriefRequestSchema = z.object({
   referralStartedAtMin: z.number().finite().nullable().default(null),
   // The whole night this time (vs the sliding window of /api/turn) — the
   // attending reads everything. Still hard-capped against abuse.
-  history: z.array(HistoryMessageSchema).max(120).default([]),
+  history: z.array(HistoryMessageSchema).max(80).default([]),
 });
 
 const DebriefModelOutputSchema = z.object({
@@ -105,6 +112,10 @@ function debriefResponse(
 }
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
+  // The most expensive call in the product, and a legitimate player needs
+  // exactly ONE per night (the UI retry stays comfortable inside 3/min).
+  if (rateLimited(ctx.request, 3)) return tooManyRequests();
+
   let parsed: z.infer<typeof DebriefRequestSchema>;
   try {
     parsed = DebriefRequestSchema.parse(await ctx.request.json());

@@ -549,8 +549,10 @@ export default function App() {
       const entries = transcript
         .map((e) => ({ role: e.role, atMin: e.atMin, replay: historyText(e) }))
         .filter((x) => x.replay.trim().length > 0);
+      // Caps mirror the server schema (80 × 3000) — sized to a real night,
+      // with the opening always kept.
       const kept =
-        entries.length > 120 ? [entries[0], ...entries.slice(-119)] : entries;
+        entries.length > 80 ? [entries[0], ...entries.slice(-79)] : entries;
       // Unlike the turn call's history (which must replay VERBATIM what the
       // world engine saw), the debrief transcript is a different consumer:
       // each entry is prefixed with its app-stamped sim minute so the
@@ -560,7 +562,7 @@ export default function App() {
         content: (
           (x.atMin !== undefined ? `[minute ${Math.round(x.atMin)}] ` : "") +
           x.replay
-        ).slice(0, 6000),
+        ).slice(0, 3000),
       }));
       const res = await fetch("/api/debrief", {
         method: "POST",

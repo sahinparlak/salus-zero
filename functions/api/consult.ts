@@ -20,6 +20,7 @@ import {
   OPEN_GLUE,
 } from "../lib/consultPrompt";
 import { renderScoresBlock } from "../lib/consultScore";
+import { rateLimited, tooManyRequests } from "../lib/rateLimit";
 
 interface Env {
   ANTHROPIC_API_KEY?: string;
@@ -72,6 +73,9 @@ const ConsultRequestSchema = z.object({
 });
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
+  // A clinician composing follow-ups cannot approach 10/min; a curl loop can.
+  if (rateLimited(ctx.request, 10)) return tooManyRequests();
+
   let parsed: z.infer<typeof ConsultRequestSchema>;
   try {
     parsed = ConsultRequestSchema.parse(await ctx.request.json());
