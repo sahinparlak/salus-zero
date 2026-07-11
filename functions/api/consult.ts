@@ -73,8 +73,10 @@ const ConsultRequestSchema = z.object({
 });
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
-  // A clinician composing follow-ups cannot approach 10/min; a curl loop can.
-  if (rateLimited(ctx.request, 10, "consult")) return tooManyRequests();
+  // The per-address budget is SHARED behind a NAT (a hospital's egress IP
+  // serves every clinician in the building) — sized for several concurrent
+  // consults per address; a curl loop runs at hundreds per minute.
+  if (rateLimited(ctx.request, 20, "consult")) return tooManyRequests();
 
   let parsed: z.infer<typeof ConsultRequestSchema>;
   try {

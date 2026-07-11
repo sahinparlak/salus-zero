@@ -8,6 +8,10 @@
 // lands on one colo), but a distributed abuser walks past it: the real belt
 // is an edge WAF rate-limit rule on /api/* (dashboard), which this code
 // deliberately does not try to replace.
+//
+// The key is the client ADDRESS, so everyone behind one NAT (venue WiFi, a
+// hospital egress) shares a scope's budget — limits at the call sites are
+// sized for several legitimate users per address, not one.
 
 const WINDOW_MS = 60_000;
 
