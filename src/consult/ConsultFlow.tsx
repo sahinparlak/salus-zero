@@ -762,9 +762,20 @@ export default function ConsultFlow({
               : "text-[11px] text-neutral-500 transition hover:text-neutral-300"
           }
         >
-          {stage === "chat"
-            ? `End the consult — erases ${ptName.trim() || "the patient"} from this device`
-            : "← Back to the night"}
+          {stage === "chat" ? (
+            <>
+              {/* One line on a phone, the full guarantee where it fits. */}
+              <span className="sm:hidden">
+                End · erases {ptName.trim() || "the patient"}
+              </span>
+              <span className="hidden sm:inline">
+                End the consult — erases {ptName.trim() || "the patient"} from
+                this device
+              </span>
+            </>
+          ) : (
+            "← Back to the night"
+          )}
         </button>
       </div>
 
@@ -1382,23 +1393,28 @@ export default function ConsultFlow({
               )}
             </div>
 
-            {/* Mobile / narrow: the instruments stack above the log. On lg+
-                they live in the cold rail instead. */}
-            <div className="flex flex-col gap-3 lg:hidden">
-              {labsStrip}
-              {studentNote}
-              {disclaimerCard}
-              {anamnesisCard(false)}
-            </div>
-
             <div
               ref={chatRef}
-              role="log"
-              aria-live="polite"
-              aria-label="Consult conversation"
               tabIndex={0}
               className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto break-words py-3 pr-1"
             >
+              {/* Mobile / narrow: the instruments live INSIDE the scroller —
+                  a phone screen belongs to the conversation, so the stack
+                  scrolls away like a chart header instead of permanently
+                  squeezing the log into a strip. On lg+ they live in the
+                  cold rail instead. */}
+              <div className="flex flex-col gap-3 lg:hidden">
+                {labsStrip}
+                {studentNote}
+                {disclaimerCard}
+                {anamnesisCard(false)}
+              </div>
+              <div
+                role="log"
+                aria-live="polite"
+                aria-label="Consult conversation"
+                className="flex flex-col gap-6"
+              >
               {messages.map((m, i) => (
                 <div key={i}>
                   {m.role === "clinician" ? (
@@ -1449,6 +1465,7 @@ export default function ConsultFlow({
                   )}
                 </div>
               ))}
+              </div>
             </div>
 
             {cError && (
