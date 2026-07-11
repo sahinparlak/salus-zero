@@ -639,7 +639,7 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen text-neutral-100 flex flex-col">
-      <NightField />
+      <NightField centered={!caseData && consultOpen} />
       {!caseData ? (
         consultOpen ? (
           <ConsultFlow
@@ -953,19 +953,24 @@ export default function App() {
 }
 
 // The ward at 02:00 — pure atmosphere, no data, fixed behind everything.
-// A cold near-black base, one warm sodium lamp pooled off-center over the
-// narrative column (the panels are 40% transparent, so it bleeds through
-// them and warms that side while the instrument aside stays cold), a colder
-// blue pool toward the instrument edge, and a vignette pulling the corners
-// of the room into the dark. Opacity-only motion, gated for reduced-motion.
-function NightField() {
+// A cold near-black base, one warm sodium lamp pooled over the narrative
+// column (the panels are 40% transparent, so it bleeds through them and
+// warms that side while the instrument aside stays cold), a colder blue
+// pool toward the instrument edge, and a vignette pulling the corners of
+// the room into the dark. Opacity-only motion, gated for reduced-motion.
+// `centered` re-keys the light to the consult's centered type column — the
+// sim keeps its 38% key over its own left-hand narrative column. The lamp
+// drifts between the two keys rather than jumping: the light moves with you.
+function NightField({ centered = false }: { centered?: boolean }) {
   return (
     <div
       aria-hidden
       className="fixed inset-0 -z-10 overflow-hidden bg-neutral-950"
     >
       <div
-        className="absolute left-[38%] top-[-12%] h-[85vh] w-[85vh] -translate-x-1/2 rounded-full opacity-60 motion-safe:animate-lamp-breath"
+        className={`absolute top-[-12%] h-[85vh] w-[85vh] -translate-x-1/2 rounded-full opacity-60 motion-safe:transition-[left] motion-safe:duration-1000 motion-safe:ease-out motion-safe:animate-lamp-breath ${
+          centered ? "left-1/2" : "left-[38%]"
+        }`}
         style={{
           background:
             "radial-gradient(circle, oklch(0.73 0.15 62 / 0.16), oklch(0.73 0.15 62 / 0.05) 45%, transparent 70%)",
@@ -981,8 +986,9 @@ function NightField() {
       <div
         className="absolute inset-0"
         style={{
-          background:
-            "radial-gradient(120% 100% at 45% 28%, transparent 52%, oklch(0.10 0.02 255 / 0.55) 100%)",
+          background: `radial-gradient(120% 100% at ${
+            centered ? "50% 26%" : "45% 28%"
+          }, transparent 52%, oklch(0.10 0.02 255 / 0.55) 100%)`,
         }}
       />
     </div>

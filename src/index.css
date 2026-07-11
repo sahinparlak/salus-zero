@@ -27,11 +27,15 @@
      (40% transparent), so the warm lamp below bleeds THROUGH the narrative
      column and not the instrument edge — that transparency is load-bearing
      for the warm-center / cold-periphery split. Text neutrals (100–600) are
-     left as-is to keep legibility. */
+     left as-is EXCEPT neutral-500: the default step sits under 4.5:1 for the
+     10–11px micro-labels that lean on it, so it is re-pointed one step
+     lighter (still cold, still dim) — a token-level contrast floor instead
+     of per-callsite fixes. */
   --color-neutral-950: oklch(0.155 0.018 255);
   --color-neutral-900: oklch(0.205 0.020 255);
   --color-neutral-800: oklch(0.275 0.020 255);
   --color-neutral-700: oklch(0.375 0.018 255);
+  --color-neutral-500: oklch(0.62 0.015 255);
 
   /* ── Sodium lamp: the one warm light in the building. ──────────────────
      Reserved for the narrative/hero surfaces (vignette, debrief reveal,
@@ -68,6 +72,14 @@
   --animate-monitor-alarm: monitorAlarm 1150ms ease-in-out infinite;
 }
 
+/* Newsreader carries an optical-size axis; without this the 17px voice
+   renders from the display master and goes spindly on the dark ground. */
+@layer base {
+  body {
+    font-optical-sizing: auto;
+  }
+}
+
 @keyframes lampBreath {
   0%,
   100% {
@@ -78,16 +90,24 @@
   }
 }
 
+/* The `to` frame ends at `none`, not identity values: with fill-mode `both`,
+   a retained `filter: blur(0)`/`transform` would leave a permanent stacking
+   context + backdrop root on every revealed surface — which silently disables
+   any descendant backdrop-filter (the sticky-header ghosting bug) and pins a
+   compositing layer per section. `none` releases all of it after the beat. */
 @keyframes revealIn {
   from {
     opacity: 0;
     filter: blur(10px);
     transform: translateY(8px);
   }
+  85% {
+    filter: blur(0);
+  }
   to {
     opacity: 1;
-    filter: blur(0);
-    transform: translateY(0);
+    filter: none;
+    transform: none;
   }
 }
 
