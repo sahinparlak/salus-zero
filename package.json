@@ -1,6 +1,6 @@
 {
   "name": "salus-zero",
-  "version": "0.0.0",
+  "version": "1.0.0-hackathon",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.9.0",
@@ -18,8 +18,7 @@
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "zod": "^3.24.0",
-    "zustand": "^5.0.0"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250101.0",
