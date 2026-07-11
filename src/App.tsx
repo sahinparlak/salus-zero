@@ -1087,7 +1087,7 @@ function ColdOpen({
         </p>
       )}
 
-      <p className="mt-4 max-w-md text-[11px] leading-relaxed tracking-wide text-neutral-600">
+      <p className="mt-4 max-w-md text-[11px] leading-relaxed tracking-wide text-neutral-500">
         Prototype — not medical advice.
         <span className="ml-2 text-neutral-700">build {__BUILD_REF__}</span>
       </p>
@@ -1162,7 +1162,7 @@ function DecisionBox({
       </div>
 
       <div>
-        <h4 className="text-[11px] uppercase tracking-wider text-neutral-600 mb-1.5">
+        <h4 className="text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">
           At the bedside
         </h4>
         <div className="flex flex-wrap gap-1.5">
@@ -1173,7 +1173,7 @@ function DecisionBox({
       </div>
 
       <div>
-        <h4 className="text-[11px] uppercase tracking-wider text-neutral-600 mb-1.5">
+        <h4 className="text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">
           The phone — every call costs minutes, and the answer may be no
         </h4>
         <div className="flex flex-wrap gap-1.5">
@@ -1411,7 +1411,7 @@ function DeltaChip({
 }) {
   if (delta === null) return null;
   if (delta === 0)
-    return <span className="text-[11px] text-neutral-600">–</span>;
+    return <span className="text-[11px] text-neutral-500">–</span>;
   return (
     <span className="text-[11px] tabular-nums text-neutral-500">
       {delta > 0 ? "▲" : "▼"}
@@ -1967,7 +1967,7 @@ function ConstraintBoard({ board }: { board: PublicCase["constraintBoard"] }) {
 
       {gone.length > 0 && (
         <div>
-          <p className="mb-2.5 text-[10px] uppercase tracking-[0.2em] text-neutral-600">
+          <p className="mb-2.5 text-[10px] uppercase tracking-[0.2em] text-neutral-500">
             Behind locked doors
           </p>
           <ul className="flex flex-col gap-2.5">
@@ -2463,7 +2463,7 @@ function ConsultFlow({
 
           <div className="flex items-center gap-3">
             <span className="h-px flex-1 bg-neutral-800" />
-            <span className="text-[10px] uppercase tracking-[0.14em] text-neutral-600">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-neutral-500">
               Not managing a patient?
             </span>
             <span className="h-px flex-1 bg-neutral-800" />
@@ -2689,7 +2689,7 @@ function ConsultFlow({
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] uppercase tracking-wider text-neutral-500">
               Sex <span className="text-ember-400">*</span>{" "}
-              <span className="normal-case tracking-normal text-neutral-600">
+              <span className="normal-case tracking-normal text-neutral-500">
                 (drives which can't-miss diagnoses come forward)
               </span>
             </span>
@@ -2744,7 +2744,7 @@ function ConsultFlow({
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] uppercase tracking-wider text-neutral-500">
               Exam findings{" "}
-              <span className="normal-case tracking-normal text-neutral-600">
+              <span className="normal-case tracking-normal text-neutral-500">
                 (no imaging needed)
               </span>
             </span>
@@ -2942,26 +2942,26 @@ function ConsultFlow({
                 </label>
               );
             })}
-            <span className="text-[10px] text-neutral-600">
+            <span className="text-[10px] text-neutral-500">
               sent with your next message
             </span>
             {/* Live readout: computed IN CODE from the ticked chips + labs,
                 updates on every keystroke — the model never touches these
                 numbers, it only explains them in its replies. */}
             <span className="ml-auto flex items-center gap-2 font-mono text-[11px] tabular-nums">
-              <span className="text-[10px] uppercase tracking-wider text-neutral-600">
+              <span className="text-[10px] uppercase tracking-wider text-neutral-500">
                 live · code
               </span>
               <span
                 className={
-                  livePas.computable ? liveTone(livePas.total, 7, 3) : "text-neutral-600"
+                  livePas.computable ? liveTone(livePas.total, 7, 3) : "text-neutral-500"
                 }
               >
                 PAS {livePas.computable ? `${livePas.total}/10` : "—"}
               </span>
               <span
                 className={
-                  liveAlv.computable ? liveTone(liveAlv.total, 7, 4) : "text-neutral-600"
+                  liveAlv.computable ? liveTone(liveAlv.total, 7, 4) : "text-neutral-500"
                 }
               >
                 Alvarado {liveAlv.computable ? `${liveAlv.total}/10` : "—"}
@@ -3025,7 +3025,7 @@ function ConsultFlow({
                 </span>
               </div>
               <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-dashed border-neutral-700 px-3 py-2 text-[13px] text-neutral-500">
-                <span className="text-[10px] tabular-nums text-neutral-600">
+                <span className="text-[10px] tabular-nums text-neutral-500">
                   02 ·
                 </span>
                 <span
@@ -3033,7 +3033,7 @@ function ConsultFlow({
                   className="h-1.5 w-1.5 rounded-full border border-neutral-600"
                 />
                 Next domain
-                <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-neutral-600">
+                <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-neutral-500">
                   coming · expert-authored
                 </span>
               </div>
@@ -3469,7 +3469,7 @@ function MimicBoard({ sec }: { sec: ProseSection }) {
     <div className="rounded-xl border border-amber-500/25 bg-neutral-900/40 p-3.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
         <div className="flex items-baseline gap-2">
-          <span className="font-mono text-[11px] text-neutral-600">
+          <span className="font-mono text-[11px] text-neutral-500">
             ({sec.num})
           </span>
           <span className="text-[11.5px] font-semibold uppercase tracking-wider text-amber-300/90">
@@ -3634,7 +3634,7 @@ function ConsultProse({
           >
             {sec.num && (
               <div className="flex items-baseline gap-2">
-                <span className="font-mono text-[11px] text-neutral-600">
+                <span className="font-mono text-[11px] text-neutral-500">
                   ({sec.num})
                 </span>
                 <span
