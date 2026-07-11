@@ -62,13 +62,21 @@ const NEGATION_WORD =
 
 const NEGATION_CONNECTORS = new Set([
   // verbs of ordering/doing that a negation naturally flows through
+  // ("have": "we don't have a CT" is a statement of absence, not an order —
+  // caught by the loop test battery)
   "order", "get", "request", "send", "do", "run", "check", "wait", "give",
   "start", "hold", "off", "use", "take", "perform", "need", "want", "ask",
-  "call", "go", "going", "mind",
+  "call", "go", "going", "mind", "have",
   // articles, pronouns, fillers
   "for", "the", "a", "an", "any", "another", "more", "to", "of", "him",
   "her", "it", "that", "this", "some", "be", "able", "even", "yet",
   "again", "just", "please", "really",
+  // time-of-day qualifiers baked into action keywords: without "morning",
+  // "don't wait for the morning ultrasound" negated the wait-trap but the
+  // bare "ultrasound" keyword still registered a scan request (the negation
+  // refused to flow through "morning") — a mis-parse in the safest sentence
+  // a player can say.
+  "morning",
 ]);
 
 function isNegated(prefix: string): boolean {
