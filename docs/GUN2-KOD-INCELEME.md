@@ -1,5 +1,10 @@
 # Gün 2 — Çekirdek Döngü Kod İncelemesi (2026-07-08)
 
+> **↳ NOT (2026-07-11):** Bu log, `glucose_ketone` aksiyonu KALDIRILMADAN önceki
+> durumu kaydeder (DKA ayırıcıdan çıkarıldı — bkz. GUN1-KLINIK-ONAY.md EK). Aşağıdaki
+> playtest/forgery örneklerinde geçen `glucose_ketone`/glukoz adımı tarihsel kayıttır;
+> güncel kodda o aksiyon yoktur.
+
 > 4 mercek (loop-doğruluk · güvenlik/sızıntı · client/state · demo/UX) × adversarial doğrulama.
 > 18 bulgu → **15 doğrulandı** (3 major, 6 minor, 5 nit), 1 belirsiz, 2 çürütüldü.
 > ✅ **Güven sınırı SAĞLAM** — tanı/groundTruth/gelecek-evre/skorlama hiçbir client yüzeyine sızmıyor (ayrıca canlı playtest ile de doğrulandı).

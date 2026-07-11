@@ -2036,7 +2036,7 @@ const RESOURCE_ITEMS: { label: string; rural: boolean }[] = [
   { label: "Plain X-ray", rural: true },
   { label: "Labs / CBC", rural: true },
   { label: "Urine dip", rural: true },
-  { label: "Bedside glucose + ketones", rural: true },
+  { label: "Analgesia (IV)", rural: true },
   { label: "Surgeon on site", rural: false },
   { label: "PICU", rural: false },
   { label: "Blood bank", rural: false },

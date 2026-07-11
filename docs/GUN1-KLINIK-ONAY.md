@@ -82,3 +82,64 @@
   simülasyonu" de → 112'ye yönlendir → dur.
 - Solo apendektomi hiçbir yerde yok; dünya-motoru "burada cerrah ve anestezi
   ekibi yok, yerinde definitif cerrahi bu dünyada imkânsız" kuralını taşıyor.
+
+---
+
+## EK · 2026-07-11 — DKA ayırıcıdan tamamen çıkarıldı (Dr. Şahin Parlak kararı)
+
+> **Karar (Dr. Şahin):** *"DKA apandisitin ayırıcı tanısında hiçbir anlamı
+> yok. Tamamen çıkarılmalı; akut batın ayırıcıları eklenmeli."* Companion
+> ayırıcı panosunda (`(iii) not yet excluded`) DKA'yı en başta ve "RUN IT
+> FIRST" vurgusuyla görmek, klinik tablosu tipik cerrahi karın olan bir
+> çocukta metabolik mimiği aşırı öne çıkarıyordu. Karar bilinçli ve nettir;
+> GUN3-RED-TEAM F2'deki "referansın kendi cümlesi, bilinçli bırakıldı" notunu
+> geçersiz kılar.
+
+**Yapılan değişiklikler (kod = tek doğruluk kaynağı):**
+
+1. **Companion referansı** (`functions/lib/appendicitisReference.ts`, Böl. C+E):
+   DKA maddesi ve "bedside glukoz+keton FIRST" çerçevesi silindi. Eklenen akut
+   batın mimikleri: **akut pankreatit** (epigastrik/kuşak ağrı, sırta vuran —
+   göçmeyen/lokalize olmayan patern) ve **primer peritonit / omental infarkt**
+   (nadir cerrahi mimikler; yatak-başı dışlanamaz, aynı cerrahi sevk yolağını
+   paylaşır). Yaş ağırlıklandırmasına **okul çağı (~5–12) → gastroenterit +
+   mezenterik adenit görünür tut** rayı eklendi.
+2. **Companion promptu** (`consultPrompt.ts`): kapsam mimik listesi güncellendi;
+   "ketoz/near-normal glukoz" rezidüel-uyarı örneği steril piyüri ile
+   değiştirildi; move (v) "en ucuz mimik-dışlama önce = yatak-başı glukoz"
+   yerine **"odaklı anamnez + seri muayene her testten önce"**.
+3. **Offline mock** (`api/consult.ts`): DKA cümlesi akut batın mimikleriyle
+   yeniden yazıldı.
+4. **Skorlanan simülasyon** (`cases/appendicitis-rural.ts`): `glucose_ketone`
+   aksiyonu / kaynağı / constraint-board satırı / 4 stage'deki kapiller glukoz
+   lab stringi kaldırıldı (idrar dipstick glukoz/keton pedleri gerçekçi olduğu
+   için KALDI). `groundTruth.mimics`: DKA çıktı; **mezenterik adenit, akut
+   pankreatit, primer peritonit/omental infarkt** girdi. Keton pitfall'ı DKA'sız
+   yeniden yazıldı. Debrief hedef #3 "en ucuz test glukoz" yerine **"eller =
+   ayırıcı motoru"**.
+5. **Skor yeniden dağıtımı (100 erişilebilir kalsın diye):** emekliye ayrılan
+   glukoz kredisi (**6 puan**) → odaklı **anamnez & muayene 3 → 9**; idrar 3,
+   grafi 3 sabit; toplam yine **15** (Diferansiyel ekseni). Tam-diferansiyel
+   iş yükü artık 15+30+25 = **70 dk**, 90 dk sevk penceresinin içinde. Kör-taahhüt
+   kapısı `anyOf`'tan `glucose_ketone` çıktı → `[history_exam, reexamine_observe]`.
+6. **Onboarding kaynak listesi** (`src/App.tsx`): "Bedside glucose + ketones"
+   artık DKA kalıntısı olduğu için **"Analgesia (IV)"** ile değiştirildi.
+7. **Testis torsiyonu eklendi** (adversarial klinik incelemenin bulgusu, Şahin
+   onayı 2026-07-11): 7 yaş ERKEK vakada referans "her erkekte skrotumu muayene
+   et" derken skorlanan simülasyon skrotal muayene/torsiyon içermiyordu. S0
+   muayenesine normal skrotal bulgu (inmiş, hassasiyetsiz, normal duruş,
+   kremaster refleksi sağlam) + `groundTruth.mimics`'e **testis torsiyonu**
+   (muayene-temelli ayırt edici) eklendi. Skrotal muayene odaklı muayenenin
+   parçası olduğundan **skor matematiği değişmedi** (history_exam yine 9;
+   etiketе "(erkekte) testis torsiyonu" eklendi).
+
+**Dokunulmayan:** `HACKATHON.md`/`ROADMAP.md`'deki **P1 ikincil DKA vakası**
+(diyabetik yönetim, "dosya-değiş" demosu) ayrı bir gelecek senaryodur —
+apandisit-mimiği DKA ile ilgisizdir, bilerek korundu.
+
+> ⚠️ **Klinik dipnot (Claude → Dr. Şahin):** Yatak-başı parmak-ucu glukozu,
+> kusan bir çocukta gerçek bir güvenlik ağıdır (yeni-başlangıç T1DM/DKA
+> psödo-akut-karın yapabilir). Kararın *DKA'yı ayırıcı panodan indirmek* olarak
+> nettir ve uygulandı; ancak istersen **DKA'dan bağımsız** olarak yalnızca
+> "parmak-ucu glukoz" aksiyonunu ucuz sistemik tarama olarak geri ekleyebiliriz
+> (panoda mimik olarak görünmeden). Senin çağrın.

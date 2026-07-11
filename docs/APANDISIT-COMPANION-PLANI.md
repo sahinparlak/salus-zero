@@ -1,6 +1,14 @@
 # SALUS Zero — Bölüm 2: Karar-Hazır Plan
 ### "Eğitimin üstünde, çekirdek": zeminlenmiş, kapsamı dar, hekimin yargısını *çoğaltan* apandisit karar-destek yoldaşı
 
+> **⚠️ GÜNCELLEME 2026-07-11 — DKA ARTIK AYIRICI DEĞİL.** Dr. Şahin, DKA'yı
+> apandisit ayırıcı tanısından tamamen çıkardı; yerine akut pankreatit ve primer
+> peritonit/omental infarkt eklendi, gastroenterit + mezenterik adenit okul-çağı
+> için öne alındı. Bu plandaki DKA'ya dayalı mimik/demo pasajları (satır 67, 122,
+> 190, 209) ARTIK GEÇERSİZDİR — şipe edilen araç DKA kullanmıyor. Ayrıntı ve
+> gerekçe: `docs/GUN1-KLINIK-ONAY.md` EK (2026-07-11). Video anlatısı
+> (`VIDEO-KONUSMA.md`) da DKA'dan söz ediyor — çekimden önce güncellenmeli.
+
 ---
 
 ## 00 · YENİ SOHBETE NOT (bunu İLK oku) + KİLİTLİ KARARLAR

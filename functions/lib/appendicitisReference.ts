@@ -92,17 +92,17 @@ assessment must surface "what else could this be / what have you not excluded"
 and must WEIGHT these by the patient's age and sex. Ruling one mimic out never
 rules out appendicitis.
 
-  • Diabetic ketoacidosis (DKA) — bedside capillary glucose + urine ketones (a
-    ~5-minute test). A normal glucose rules DKA out by itself; ketones rising with
-    a NORMAL glucose are starvation ketones from vomiting/poor intake, not DKA.
-    DKA can masquerade as an acute abdomen and operating on it is a catastrophe —
-    this is the cheapest life-saving test in the room. RUN IT FIRST.
   • Acute gastroenteritis — history + serial exam: no diarrhoea, and pain came
     FIRST and migrated/localised before vomiting. In gastroenteritis, vomiting/
     diarrhoea dominate and pain neither migrates nor localises.
     CAUTION in the young child (~3–6 y): diarrhoea does NOT exclude appendicitis —
     in younger children appendicitis more often presents WITH diarrhoea; never let
     loose stools alone close the question. [S: H&A40]
+  • Acute pancreatitis — uncommon in children but a mimic: epigastric or band-like
+    pain boring THROUGH to the back, worse lying flat, with persistent vomiting —
+    NOT the periumbilical→RLQ march of appendicitis. Serum amylase/lipase confirms
+    where available; where it is not, the pain character and the ABSENCE of
+    migration/localisation are the bedside discriminators.
   • Urinary tract infection — urinalysis: nitrite negative, no bacteriuria, only a
     few WBC (sterile pyuria) is compatible with an inflamed structure lying against
     the urinary tract, NOT proof of UTI. A UTI needs bacteriuria/nitrites.
@@ -111,6 +111,11 @@ rules out appendicitis.
     can never confirm the real diagnosis.
   • Right-lower-lobe pneumonia (referred pain) — clear visible lung bases on the
     abdominal film, normal SpO₂, no cough/focal chest finding.
+  • Primary (spontaneous) bacterial peritonitis / omental infarction — rare surgical
+    mimics presenting as a right-sided or diffuse acute abdomen. Neither is
+    confirmable or excludable with bedside tools; both ride the SAME surgical pathway
+    (transfer for surgical evaluation), so a child already being referred for possible
+    appendicitis is covered. Keep them alive so the picture is not force-fit to appendicitis.
 
   • Testicular torsion (BOY, ANY AGE) — ALWAYS examine the scrotum in a boy with
     abdominal pain; a hard time-window, easily missed under a blanket.  • Ovarian torsion (GIRL) — sudden severe unilateral lower pain ± palpable mass;
@@ -125,6 +130,8 @@ rules out appendicitis.
   • Ectopic pregnancy — in any girl of child-bearing age, a can't-miss: check a
     urine/serum pregnancy test where available before anchoring on appendicitis.
   AGE/SEX WEIGHTING: toddler → push intussusception, malrotation/volvulus forward;
+  school-age (~5–12) → keep gastroenteritis and mesenteric adenitis in view as the
+  common non-surgical mimics, but never let either close the question;
   adolescent girl → push ectopic and ovarian torsion forward; any boy → never skip
   the scrotal exam (testicular torsion).
 
@@ -143,8 +150,9 @@ Escalate / do not delay if any appear:
 ──────────────────────────────────────────────────────────────────────────────
 E) THE CT-LESS, RESOURCE-LIMITED PATHWAY
   • COMMIT ON CLINICAL GROUNDS — score + serial examination, not imaging you don't have.
-  • Spend the cheap tests on MIMIC-EXCLUSION, not confirmation: bedside glucose +
-    ketones FIRST (DKA), urinalysis (UTI), plain film (constipation, basal pneumonia,
+  • Spend the cheap tests on MIMIC-EXCLUSION, not confirmation: the focused history
+    and serial exam FIRST (gastroenteritis, mesenteric adenitis, the pancreatitis
+    pain-pattern), urinalysis (UTI), plain film (constipation, basal pneumonia,
     free air). A nonspecific film excludes mimics; it never confirms appendicitis.
   • Stabilise: keep NPO; IV fluids and — where local protocol supports it — IV
     antibiotics. (NO DOSES here or anywhere — the clinician sets and verifies those.)

@@ -53,6 +53,11 @@ zamanlaması) **asla puanlanmıyor** — roadmap kuralı, değişmedi.
    dışlama = odadaki en ucuz hayat kurtaran test) · idrar 3 (İYE) ·
    grafi 3 (konstipasyon/bazal pnömoni) · CBC 3 (enflamatuar gidişat).
    Dağılım ve glukozun primatı onaylı mı?
+   > **↳ GÜNCELLEME 2026-07-11 (Dr. Şahin):** DKA ayırıcıdan tamamen çıkarıldı.
+   > Emekliye ayrılan glukoz kredisi (6) → **anamnez & muayene (3→9)**; idrar 3,
+   > grafi 3 sabit; toplam yine 15. Güncel dağılım kodda ve GUN1-KLINIK-ONAY.md
+   > EK'inde. Aşağıdaki 5. maddedeki "glukoz yokluğu" ifadesi artık "muayene
+   > yokluğu" olarak okunmalı (kör-taahhüt kapısı = `[history_exam, reexamine_observe]`).
 5. **⚠️ En sert vaka: sıfır muayene + anında sevk = 85 puan.** Hiç dokunmadan,
    hiç test istemeden 15. dakikada zinciri başlatan oyuncu 60+25+0=85 alır
    (ayırıcı tanının 15'ini kaybeder, başka ceza yok). Tez "erken taahhüt HER

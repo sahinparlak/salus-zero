@@ -265,8 +265,9 @@ function streamMock(
       ? "Reading you back: a child with a possible acute abdomen. Before " +
         "anchoring on appendicitis, keep the age-appropriate mimics alive — " +
         "testicular torsion in a boy (examine the scrotum), intussusception " +
-        "and malrotation/volvulus in a young child, DKA (a bedside glucose + " +
-        "ketones is your cheapest life-saving test), and mesenteric adenitis. " +
+        "and malrotation/volvulus in a young child, and the common non-surgical " +
+        "mimics your history and exam sort out first: gastroenteritis, " +
+        "mesenteric adenitis, and the pancreatitis pain-pattern. " +
         "Red flags to exclude now: rigidity, rebound in all quadrants, a toxic " +
         "look, a rising heart rate with a falling blood pressure. With no CT or " +
         "ultrasound, commit on clinical grounds and start the referral early — " +

@@ -46,7 +46,6 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
       "xray_abd",
       "cbc",
       "urinalysis",
-      "glucose_ketone",
       "iv_fluids",
       "iv_antibiotics",
       "analgesia",
@@ -61,7 +60,6 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
     { key: "xray_abd", label: "Abdominal X-ray", status: "available", detail: "plain film — technician on call" },
     { key: "cbc", label: "CBC", status: "available", detail: "night lab — ~40 min turnaround" },
     { key: "urinalysis", label: "Urinalysis", status: "available", detail: "bedside dipstick + microscopy" },
-    { key: "glucose_ketone", label: "Glucose + Ketones", status: "available", detail: "bedside strips — result in seconds" },
     { key: "iv_fluids", label: "IV Fluids", status: "available", detail: "crystalloids stocked on the ward" },
     { key: "iv_antibiotics", label: "IV Antibiotics", status: "available", detail: "ward stock — ready to hang" },
     { key: "analgesia", label: "Analgesia", status: "available", detail: "IV analgesia on hand" },
@@ -81,8 +79,6 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
       keywords: ["cbc", "blood count", "hemogram", "full blood", "white count", "wbc", "tam kan"] },
     { id: "urinalysis", label: "Order urinalysis (dipstick + microscopy)", baseTimeCostMinutes: 30, requiresResource: "urinalysis",
       keywords: ["urinalysis", "urine test", "urine sample", "urine dip", "dipstick", "urine micro", "idrar"] },
-    { id: "glucose_ketone", label: "Check capillary glucose + urine ketones (bedside)", baseTimeCostMinutes: 5, requiresResource: "glucose_ketone",
-      keywords: ["glucose", "ketone", "blood sugar", "fingerstick", "finger prick", "glukoz", "keton"] },
     { id: "xray_abd", label: "Order abdominal X-ray (portable)", baseTimeCostMinutes: 25, requiresResource: "xray_abd",
       keywords: ["x-ray", "xray", "x ray", "radiograph", "plain film", "abdominal film", "grafi"] },
     { id: "iv_fluids", label: "Start IV fluids", baseTimeCostMinutes: 15, requiresResource: "iv_fluids",
@@ -125,14 +121,14 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
         "favoring the right side. Gentle percussion over the right lower " +
         "quadrant makes him wince and push your hand away; asked to hop on " +
         "the spot, he attempts once, clutches his right side, and will not " +
-        "try again.",
+        "try again. Scrotum examined: both testes descended and non-tender, " +
+        "normal lie, cremasteric reflex intact.",
       labs: {
         cbc: "WBC 10,800/µL (neutrophils 65%, ANC ≈7,000/µL), Hgb 12.6 g/dL, Plt 262,000/µL.",
         urinalysis:
           "Dipstick: specific gravity 1.020, leukocyte esterase trace, " +
           "nitrite negative, glucose negative, ketones negative. " +
           "Microscopy: 3–5 WBC/hpf, no bacteria, no RBC.",
-        glucose_ketone: "Capillary glucose 96 mg/dL (normal). Urine ketones: negative.",
         xray_abd:
           "Supine and upright abdominal films: nonspecific bowel gas " +
           "pattern; no free air under the diaphragm; no air–fluid levels; " +
@@ -170,7 +166,6 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
           "Dipstick: specific gravity 1.025, leukocyte esterase 1+, " +
           "nitrite negative, glucose negative, ketones 1+. Microscopy: " +
           "5–10 WBC/hpf, no bacteria, no RBC.",
-        glucose_ketone: "Capillary glucose 102 mg/dL (normal). Urine ketones: small (1+).",
         xray_abd:
           "Mild localized ileus with a few modestly dilated small-bowel " +
           "loops in the right lower abdomen; no free air; no obstructive " +
@@ -208,7 +203,6 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
           "Dipstick: specific gravity 1.025, leukocyte esterase 1+, " +
           "nitrite negative, glucose negative, ketones 2+. Microscopy: " +
           "10–15 WBC/hpf, no bacteria, no RBC.",
-        glucose_ketone: "Capillary glucose 108 mg/dL (normal). Urine ketones: moderate (2+).",
         xray_abd:
           "Paucity of bowel gas in the right iliac fossa with a few " +
           "dilated sentinel small-bowel loops; gas pattern otherwise " +
@@ -249,7 +243,6 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
           "Dipstick: specific gravity 1.030, leukocyte esterase 1+, " +
           "nitrite negative, glucose negative, ketones 2+. Microscopy: " +
           "10–15 WBC/hpf, no bacteria.",
-        glucose_ketone: "Capillary glucose 118 mg/dL (normal). Urine ketones: moderate (2+).",
         xray_abd:
           "Diffuse small-bowel dilatation with a generalized ileus " +
           "pattern; no pneumoperitoneum identified; no fecal loading; " +
@@ -276,16 +269,33 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
       "Acute appendicitis — advanced presentation at the early-perforation threshold",
     mimics: [
       {
-        label: "Diabetic ketoacidosis (DKA)",
+        label: "Testicular torsion",
         distinguisher:
-          "Bedside capillary glucose + urine ketones (a 5-minute test): " +
-          "glucose is normal throughout, which rules out DKA by itself. " +
-          "The ketones that rise as the night wears on are starvation " +
-          "ketones from vomiting and poor intake — moderate ketones with a " +
-          "normal glucose mean starvation, not DKA. DKA can present as a " +
-          "pseudo-acute abdomen, and operating on a DKA abdomen is a " +
-          "classic catastrophe — this is the cheapest life-saving test in " +
-          "the room.",
+          "Always examine the scrotum in a boy with abdominal pain — torsion " +
+          "is a hard time-window, easily missed under a gown. Here both testes " +
+          "are descended and non-tender with a normal lie and an intact " +
+          "cremasteric reflex, which makes torsion very unlikely; it never " +
+          "justifies delaying the surgical-abdomen workup.",
+      },
+      {
+        label: "Mesenteric adenitis",
+        distinguisher:
+          "History and serial exam: a post-viral, more diffuse and " +
+          "less-marching right-lower-quadrant pain in a child who is not " +
+          "toxic — a diagnosis of relief, never a first assumption. Emir's " +
+          "pain migrated from the umbilicus and localised, and his exam and " +
+          "trajectory are worsening, which does not fit adenitis; keep it on " +
+          "the list only until the surgical picture is settled.",
+      },
+      {
+        label: "Acute pancreatitis",
+        distinguisher:
+          "Pain character on history and exam: pancreatitis bores through to " +
+          "the back from the epigastrium and is worse lying flat — not the " +
+          "periumbilical-to-right-lower-quadrant march Emir describes. Serum " +
+          "amylase/lipase would confirm it, but it is not stocked here; the " +
+          "pain pattern and the clear migration and localisation are the " +
+          "bedside discriminators.",
       },
       {
         label: "Acute gastroenteritis",
@@ -319,10 +329,19 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
           "pneumonia masquerading as belly pain is off the table with " +
           "tools already in hand.",
       },
+      {
+        label: "Primary peritonitis / omental infarction",
+        distinguisher:
+          "Rare surgical mimics that cannot be confirmed or excluded with the " +
+          "tools in this hospital. They do not change tonight's decision: both " +
+          "ride the same surgical pathway as appendicitis, so a child already " +
+          "being referred for a surgical abdomen is covered. Named here so the " +
+          "picture is not force-fit to appendicitis.",
+      },
     ],
     pitfalls: [
       "Sterile pyuria (trace-to-1+ leukocyte esterase, a few WBC/hpf, nitrite negative) does NOT exclude the diagnosis — labeling it 'UTI' and reaching for oral antibiotics is a classic delay.",
-      "Rising urine ketones with a NORMAL capillary glucose read as starvation from vomiting and poor intake, not DKA — do not let the ketone line restart the metabolic workup.",
+      "Rising urine ketones in a child who has stopped eating are starvation ketones from vomiting and poor intake — a sign he is taking nothing in and getting sicker, not a second diagnosis to chase.",
       "Analgesia does NOT mask the surgical abdomen — withholding pain relief 'so the exam stays reliable' is outdated dogma; modern evidence says treat the pain.",
       "IV fluids improve the numbers, not the disease — a heart rate that falls after a bolus is resuscitation working, not the child getting better.",
       "The transient false-relief window after perforation (luminal pressure drops, pain briefly eases, elicited tenderness blunts, the score dips) is misread as improvement — the child 'looking better' at that moment is the most dangerous illusion in the case.",
@@ -332,32 +351,34 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
     ],
   },
   // Scoring weights APPROVED by Dr. Şahin Parlak, 2026-07-08 (Day 4 rulings,
-  // docs/GUN3-SKOR-ONAY.md): differential credit moved from CBC to the
-  // history & exam (the real gastroenteritis discriminator; CBC keeps its
-  // narrative/PAS role and stays orderable) — which also makes 100 reachable
-  // (15+5+30+25 = 75 min of workup fits the 90-minute window). Blind commit:
-  // his madde-5 call — instant referral with zero assessment loses 10 more.
+  // docs/GUN3-SKOR-ONAY.md); differential re-weighted 2026-07-11 (Dr. Parlak,
+  // docs/GUN1-KLINIK-ONAY.md addendum): DKA dropped from the appendicitis
+  // differential entirely, so the retired capillary glucose+ketone credit (6)
+  // moves onto the focused history & exam — the true differential engine here
+  // (gastroenteritis, mesenteric adenitis, pancreatitis pain-pattern). Points
+  // still sum to 15 so 100 stays reachable; the workup to earn it is now
+  // 15+30+25 = 70 min, still inside the 90-minute referral window. Blind
+  // commit: his madde-5 call — instant referral with zero assessment loses 10.
   scoringSignals: {
     referTargetByMin: 90,
     forbiddenResources: ["ct_abd", "us_abd"],
     waitActions: ["await_morning_us"],
     differentialActions: [
-      { actionId: "glucose_ketone", points: 6, label: "DKA excluded — capillary glucose and ketones checked" },
+      { actionId: "history_exam", points: 9, label: "The differential engine — history and focused exam: gastroenteritis, mesenteric adenitis, the pancreatitis pain-pattern, and (in a boy) testicular torsion sorted at the bedside with your hands" },
       { actionId: "urinalysis", points: 3, label: "UTI mimic worked up — urinalysis" },
       { actionId: "xray_abd", points: 3, label: "Constipation and basal pneumonia excluded — abdominal film" },
-      { actionId: "history_exam", points: 3, label: "Gastroenteritis mimic excluded — history taken and the abdomen examined with your hands" },
     ],
     blindCommitPenalty: {
       // reexamine_observe counts: a serial exam IS a bedside assessment —
       // without it the score line "no physical examination at all" could
       // contradict an order log showing "Re-examine / observe" (review
       // finding, Day 4).
-      anyOf: ["history_exam", "reexamine_observe", "glucose_ketone"],
+      anyOf: ["history_exam", "reexamine_observe"],
       penalty: 10,
       label:
         "The referral was committed without any bedside assessment at all — " +
-        "no physical examination, not even a bedside glucose. Sending a " +
-        "child on a four-hour ambulance ride unexamined gambles the " +
+        "no history taken, no physical examination, not even a serial re-exam. " +
+        "Sending a child on a four-hour ambulance ride unexamined gambles the " +
         "diagnosis twice",
     },
   },
@@ -365,7 +386,7 @@ export const appendicitisRural: CaseSpec = CaseSpecSchema.parse({
     goals: [
       "Start the referral chain the moment clinical suspicion commits — in a setting where the ambulance takes four hours to reach you, time-to-referral-initiation is the single number that decides the outcome.",
       "Never let an unavailable test set your tempo: waiting for a CT or the morning sonographer adds hours of disease progression and changes no decision you can make tonight.",
-      "Spend the cheapest tests first: capillary glucose excludes DKA — the metabolic mimic of the acute abdomen that turns an unnecessary operation into a catastrophe — and rising ketones with a normal glucose read as starvation from vomiting, not diabetes.",
+      "Your hands are the differential engine: in a hospital with no CT and no ultrasound, the focused history and serial exam are what separate appendicitis from its common mimics — gastroenteritis, mesenteric adenitis, the pancreatitis pain-pattern — and they cost nothing but the minutes you give them.",
       "Distrust sudden improvement: a transient easing of pain during a worsening course can mark progression, not recovery — reassess the whole child, not the last complaint.",
       "Treat the disease, not the number: IV fluids and antibiotics make the monitor look better while the underlying process advances; supportive care buys transfer time — it is not a disposition.",
     ],
