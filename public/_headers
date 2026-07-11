@@ -1,0 +1,11 @@
+# Cloudflare Pages copies public/ into dist/ at build; Pages serves these
+# headers on every static asset (Functions responses are not affected).
+# The app is fully self-contained by design — fonts self-hosted, no CDN, no
+# third-party calls — so a strict same-origin CSP costs nothing to keep.
+# 'unsafe-inline' in style-src is for React inline style attributes (the
+# reveal animations and the lamp glow); data: covers Vite-inlined assets and
+# the data-URI favicon.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
