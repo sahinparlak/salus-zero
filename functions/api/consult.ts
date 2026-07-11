@@ -223,6 +223,11 @@ function mergeAlternating(
 // Parse Anthropic's SSE and re-emit only the text deltas as a plain-text
 // stream — no SSE or JSON parsing on the client. thinking/ping/message events
 // are swallowed, so even if thinking were enabled it could never leak to text.
+// A mid-stream `error` event, a max_tokens truncation or a dropped upstream
+// read used to be swallowed silently — the reply just stopped and read as
+// complete. All three now ERROR the relay stream, which aborts the response
+// body mid-transfer: the client's reader throws and the consult UI's
+// existing error/retry path takes over. Kept in sync with turn.ts's copy.
 function anthropicSseToText(
   upstream: ReadableStream<Uint8Array>,
 ): ReadableStream<Uint8Array> {
@@ -232,8 +237,9 @@ function anthropicSseToText(
     async start(controller) {
       const reader = upstream.getReader();
       let buffer = "";
+      let failure: string | null = null;
       try {
-        for (;;) {
+        relay: for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
@@ -247,7 +253,7 @@ function anthropicSseToText(
               try {
                 const evt = JSON.parse(data) as {
                   type?: string;
-                  delta?: { type?: string; text?: string };
+                  delta?: { type?: string; text?: string; stop_reason?: string };
                 };
                 if (
                   evt.type === "content_block_delta" &&
@@ -255,6 +261,15 @@ function anthropicSseToText(
                   evt.delta.text
                 ) {
                   controller.enqueue(encoder.encode(evt.delta.text));
+                } else if (evt.type === "error") {
+                  failure = "upstream mid-stream error event";
+                  break relay;
+                } else if (
+                  evt.type === "message_delta" &&
+                  evt.delta?.stop_reason === "max_tokens"
+                ) {
+                  failure = "upstream stopped at max_tokens";
+                  break relay;
                 }
               } catch {
                 /* ignore keep-alive pings and non-JSON lines */
@@ -262,8 +277,18 @@ function anthropicSseToText(
             }
           }
         }
+      } catch (err) {
+        failure = `upstream read failed: ${(err as Error).message}`;
       } finally {
-        controller.close();
+        if (failure) {
+          // PHI SAFETY: the failure strings above are fixed text plus a
+          // transport error message — nothing derived from the request.
+          console.error(`consult SSE relay aborted: ${failure}`);
+          reader.cancel().catch(() => {});
+          controller.error(new Error(failure));
+        } else {
+          controller.close();
+        }
       }
     },
   });
