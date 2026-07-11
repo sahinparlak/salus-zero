@@ -7,7 +7,7 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "vite",
-    "check:ref": "sh -c '! grep -q \"\\[\\[\" functions/lib/appendicitisReference.ts || { echo \"check:ref FAILED — appendicitisReference.ts still contains [[ markers; resolve them before shipping.\" >&2; exit 1; }'",
+    "check:ref": "sh scripts/check-ref.sh",
     "build": "pnpm check:ref && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "wrangler pages dev",
@@ -23,6 +23,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250101.0",
     "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^26.1.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
