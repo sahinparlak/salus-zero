@@ -1,0 +1,23 @@
+# The same gate chain `pnpm build` runs locally, on every push — so the
+# README badge is a live claim, not decoration.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:ref
+      - run: pnpm typecheck
+      - run: pnpm test

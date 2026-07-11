@@ -3,15 +3,16 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.9.0",
   "description": "SALUS Zero — a clinical training simulator for medicine where nothing is available.",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "vite",
     "check:ref": "sh scripts/check-ref.sh",
-    "build": "pnpm check:ref && vite build",
+    "build": "pnpm check:ref && pnpm typecheck && vitest run && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "wrangler pages dev",
-    "deploy": "wrangler pages deploy",
+    "deploy": "pnpm build && wrangler pages deploy",
     "test": "vitest run"
   },
   "dependencies": {

@@ -1,5 +1,7 @@
 # SALUS Zero
 
+[![CI](https://github.com/sahinparlak/salus-zero/actions/workflows/ci.yml/badge.svg)](https://github.com/sahinparlak/salus-zero/actions/workflows/ci.yml)
+
 **A clinical training simulator for medicine where nothing is available.**
 
 **Live demo:** https://salus-zero.pages.dev
