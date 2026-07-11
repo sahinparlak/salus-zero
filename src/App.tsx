@@ -710,7 +710,7 @@ export default function App() {
         </header>
 
         {error && (
-          <p className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+          <p role="alert" className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
             {error}
           </p>
         )}
@@ -756,6 +756,10 @@ export default function App() {
                 </h3>
                 <div
                   ref={transcriptRef}
+                  role="log"
+                  aria-live="polite"
+                  aria-label="The ward — night transcript"
+                  tabIndex={0}
                   className="max-h-[26rem] overflow-y-auto flex flex-col gap-4 pr-1"
                 >
                   {transcript.length === 0 && (
@@ -1077,7 +1081,7 @@ function ColdOpen({
       </div>
 
       {error && (
-        <p className="max-w-md rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+        <p role="alert" className="max-w-md rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
           {error}
         </p>
       )}
@@ -2644,7 +2648,7 @@ function ConsultFlow({
           </div>
 
           {cError && (
-            <p className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+            <p role="alert" className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
               {cError}
             </p>
           )}
@@ -2692,6 +2696,7 @@ function ConsultFlow({
                 <button
                   key={s}
                   onClick={() => setSex(s)}
+                  aria-pressed={sex === s}
                   className={`rounded-lg border px-4 py-2 text-sm transition ${
                     sex === s
                       ? "border-ember-500/60 bg-ember-500/15 text-neutral-100"
@@ -2713,6 +2718,7 @@ function ConsultFlow({
                 <button
                   key={c}
                   onClick={() => setComplaints((prev) => toggleIn(prev, c))}
+                  aria-pressed={complaints.includes(c)}
                   className={`rounded-full border px-3 py-1.5 text-[13px] transition ${
                     complaints.includes(c)
                       ? "border-ember-500/60 bg-ember-500/15 text-neutral-100"
@@ -2745,6 +2751,7 @@ function ConsultFlow({
                 <button
                   key={c}
                   onClick={() => setExamFindings((prev) => toggleIn(prev, c))}
+                  aria-pressed={examFindings.includes(c)}
                   className={`rounded-full border px-3 py-1.5 text-[13px] transition ${
                     examFindings.includes(c)
                       ? "border-ember-500/60 bg-ember-500/15 text-neutral-100"
@@ -2771,6 +2778,7 @@ function ConsultFlow({
                     onClick={() =>
                       setResources((prev) => toggleIn(prev, r.label))
                     }
+                    aria-pressed={on}
                     className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-[13px] transition ${
                       on
                         ? "border-sky-500/40 bg-sky-500/10 text-sky-200"
@@ -2803,6 +2811,7 @@ function ConsultFlow({
                 <button
                   key={t.key}
                   onClick={() => setTransferKey(t.key)}
+                  aria-pressed={transferKey === t.key}
                   className={`rounded-lg border px-3.5 py-1.5 text-[13px] tabular-nums transition ${
                     transferKey === t.key
                       ? "border-sky-500/50 bg-sky-500/10 text-sky-200"
@@ -3156,6 +3165,10 @@ function ConsultFlow({
 
           <div
             ref={chatRef}
+            role="log"
+            aria-live="polite"
+            aria-label="Consult conversation"
+            tabIndex={0}
             className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto py-3 pr-1"
           >
             {messages.map((m, i) => (
@@ -3190,7 +3203,7 @@ function ConsultFlow({
                       </div>
                     )}
                     {m.doseFlag && (
-                      <p className="mt-2 rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-xs leading-relaxed text-red-300">
+                      <p role="alert" className="mt-2 rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-xs leading-relaxed text-red-300">
                         ⚠ This reply appears to contain a dose or directive —
                         the tool must not do that. Treat it as an error and
                         verify independently.
@@ -3203,7 +3216,7 @@ function ConsultFlow({
           </div>
 
           {cError && (
-            <p className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+            <p role="alert" className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
               {cError}
             </p>
           )}
