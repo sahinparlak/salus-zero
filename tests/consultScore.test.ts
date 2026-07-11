@@ -170,14 +170,14 @@ describe("score lines & block (format contract + age rail)", () => {
 
 describe("chip labels stay in sync with the UI", () => {
   const here = dirname(fileURLToPath(import.meta.url));
-  const app = readFileSync(join(here, "../src/App.tsx"), "utf8");
+  const app = readFileSync(join(here, "../src/consult/ConsultFlow.tsx"), "utf8");
   // The scorer reads complaint components from intake.complaintChips and exam
   // components from intake.examFindings — so each label must live in the
   // MATCHING UI array, not merely somewhere in the file. A chip moved between
   // arrays silently un-scores its component; this pins membership.
   const arrayBlock = (name: string) => {
     const m = app.match(new RegExp(`const ${name} = \\[([^\\]]+)\\]`));
-    if (!m) throw new Error(`${name} array not found in App.tsx`);
+    if (!m) throw new Error(`${name} array not found in ConsultFlow.tsx`);
     return m[1];
   };
   const complaintBlock = arrayBlock("COMPLAINT_CHIPS");

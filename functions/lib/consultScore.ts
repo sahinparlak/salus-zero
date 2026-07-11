@@ -13,7 +13,8 @@
 // ════════════════════════════════════════════════════════════════════════════
 import type { Intake } from "./consultPrompt";
 
-// Chip labels — MUST match src/App.tsx COMPLAINT_CHIPS / EXAM_CHIPS verbatim.
+// Chip labels — MUST match src/consult/ConsultFlow.tsx COMPLAINT_CHIPS /
+// EXAM_CHIPS verbatim.
 // A renamed chip silently un-scores its component; the unit test pins these.
 export const CHIP = {
   migration: "Pain migrated to RLQ",
