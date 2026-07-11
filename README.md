@@ -4,7 +4,7 @@
 
 **A clinical training simulator for medicine where nothing is available.**
 
-**Live demo:** https://salus-zero.pages.dev
+**Live demo:** https://saluszero.com — mirror: https://salus-zero.pages.dev
 
 Most medical training assumes a hospital that has everything. But most of the
 world's children are treated where there is no CT, no ultrasound, no surgeon in
