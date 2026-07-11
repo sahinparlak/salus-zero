@@ -58,15 +58,16 @@ export const TALK_ONLY_COST_MIN = 5;
 // registers. Punctuation and dashes always break the bond ("no choice —
 // transfer him now" registers). Curly apostrophes are normalized upstream.
 const NEGATION_WORD =
-  /\b(no|not|don'?t|do not|can'?t|cannot|won'?t|without|isn'?t|never|unavailable)\b/gi;
+  /\b(no|not|don'?t|do not|can'?t|cannot|won'?t|without|isn'?t|haven'?t|hasn'?t|hadn'?t|never|unavailable)\b/gi;
 
 const NEGATION_CONNECTORS = new Set([
   // verbs of ordering/doing that a negation naturally flows through
-  // ("have": "we don't have a CT" is a statement of absence, not an order —
-  // caught by the loop test battery)
+  // (have/got/had: "we don't have a CT", "we haven't got a CT", "he hasn't
+  // had an ultrasound" are statements of absence, not orders — caught by
+  // the loop test battery + adversarial review)
   "order", "get", "request", "send", "do", "run", "check", "wait", "give",
   "start", "hold", "off", "use", "take", "perform", "need", "want", "ask",
-  "call", "go", "going", "mind", "have",
+  "call", "go", "going", "mind", "have", "got", "had",
   // articles, pronouns, fillers
   "for", "the", "a", "an", "any", "another", "more", "to", "of", "him",
   "her", "it", "that", "this", "some", "be", "able", "even", "yet",

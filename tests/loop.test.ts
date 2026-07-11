@@ -72,6 +72,17 @@ describe("negation NLP — refusals must not become orders", () => {
     expect(ids("we don’t have a CT")).toEqual([]);
   });
 
+  it("statements of absence with have/got/had register nothing", () => {
+    // The adversarial review caught the haven't/hasn't siblings of the
+    // "don't have" fix — a mis-parse here charges phone minutes AND logs a
+    // forbidden-resource ask the score counts against the player.
+    expect(ids("we haven't got a CT here, refer him now")).toEqual([
+      "start_referral",
+    ]);
+    expect(ids("he hasn't had an ultrasound")).toEqual([]);
+    expect(ids("we hadn't got an ultrasound tonight")).toEqual([]);
+  });
+
   it('"no ultrasound here, refer now" registers the referral, not the scan', () => {
     expect(ids("no ultrasound here, refer now")).toEqual(["start_referral"]);
   });
