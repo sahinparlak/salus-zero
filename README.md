@@ -12,6 +12,9 @@ the building — only a clock and a single doctor. SALUS Zero trains
 decision-making for *that* world. Its signature constraint: **you cannot order a
 CT** — you decide with what the clinic actually has.
 
+SALUS Zero meets you twice: **train for that night** — or **bring the real
+patient** and decide with what you actually have.
+
 > **A new, from-scratch simulation engine built during the *Built with Claude:
 > Life Sciences* hackathon — part of the broader SALUS Zero vision.**
 
@@ -34,7 +37,10 @@ The engine is live and plays end to end. Two doors share it:
 - **The consult companion (real-patient decision support).** A grounded,
   deliberately narrow appendicitis companion for the clinician with a real
   child in front of them: reference-anchored, mimic-forcing, dose-refusing,
-  PHI-ephemeral. Its PAS/Alvarado numbers are code-computed
+  PHI-ephemeral. It starts from your inventory, not an assumed hospital: you
+  confirm what the clinic actually has and how far the referral center is,
+  and every plan is composed within those walls — it will never advise the
+  CT you don't have. Its PAS/Alvarado numbers are code-computed
   ([`functions/lib/consultScore.ts`](functions/lib/consultScore.ts)) and handed
   to the model as data.
 
