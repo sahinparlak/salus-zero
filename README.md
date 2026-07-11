@@ -53,6 +53,28 @@ gets a public projection of the case and a state header per turn, nothing more.
 The model narrates and teaches; the code owns the clock, the physiology and
 the number.
 
+## Why an engine, not a chatbot
+
+Ask a plain chat model to run this night and it will play along — invent the
+lab it doesn't have, let the CT happen, lose track of the clock, and grade its
+own story kindly. SALUS Zero is built **for the model's fallibility, not its
+intelligence** ([docs/FELSEFE.md](docs/FELSEFE.md)). The model does only what
+models are good at — narrate the world, teach at the bedside — and everything
+that must be *true* is code:
+
+- **The clock and the vitals.** Every action costs minutes; physiology follows
+  the authored stage curve deterministically. The world pushes back even where
+  a model would be agreeable.
+- **The constraint.** "No CT here" is data in the case spec, enforced in the
+  turn resolver — not a hope that the model remembers its instructions.
+- **The number.** The 0–100 debrief and the PAS/Alvarado scores are auditable
+  arithmetic; the model explains the score but cannot invent it.
+- **The refusals.** Doses are refused by prompt rails plus a code backstop; the
+  companion answers from a physician-approved reference, and the mimics are
+  forced into every assessment.
+
+A chatbot is built to agree with you. This engine is built to push back.
+
 ## Run locally
 
 ```bash
