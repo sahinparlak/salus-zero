@@ -77,6 +77,20 @@ that must be *true* is code:
 
 A chatbot is built to agree with you. This engine is built to push back.
 
+## Why one disease
+
+The companion is narrow on purpose: it answers only for suspected appendicitis
+in a child, because every line it speaks is anchored to a physician-approved
+reference and every score it shows is validated for exactly that question. An
+unvalidated case is worse than one perfect case — breadth without grounding is
+exactly the chatbot failure this build exists to refuse. Appendicitis earned
+the first slot: it is the most common surgical emergency of childhood, the
+diagnosis rides on exam and simple labs when imaging is missing, and the cost
+of delay is perforation on a long transfer road. The engine itself is
+case-agnostic — resources, stages and scoring are data
+([`functions/cases/`](functions/cases/)) — so the next validated case is
+authoring work, not engineering.
+
 ## Run locally
 
 ```bash
