@@ -32,11 +32,15 @@ validasyonuna** verilir. Model karar verici değildir; uzman bilgisini gece
 | PHI cihazda bile durmaz | Unmount = silme; localStorage yok |
 | "Never a free-text upload" | Kanıt kartı; kesikli raf TUŞ DEĞİL |
 
-## Dürüst boşluk
+## Dürüst boşluk (yakalandı → kapatıldı)
 
-**Companion'ın PAS/Alvarado aritmetiği hâlâ modelde.** Felsefe "güvenlik-kritik
-iddia asla üretimden gelmez" der; skor tam öyle bir iddiadır. Canlıda iki kez
-yakalandı (toplam hatası + bileşen atlaması), prompt-yama + red-team kontrolüyle
-idare ediliyor, yol haritasının 1. maddesi: skor aritmetiği koda taşınacak
-(PAS bileşenleri intake'ten deterministik). Kendi zaafını kendisi söyleyen
-proje = felsefenin canlı icrası. *Yanılabilirliğe göre tasarlandık — bizimki dahil.*
+**Companion'ın PAS/Alvarado aritmetiği başta modeldeydi.** Felsefe
+"güvenlik-kritik iddia asla üretimden gelmez" der; skor tam öyle bir iddiadır.
+Canlıda iki kez yakalandı (toplam hatası + bileşen atlaması) ve yol haritasının
+1. maddesi olarak koda taşındı: PAS/Alvarado artık intake'ten deterministik
+hesaplanıyor (`functions/lib/consultScore.ts`, sınır değerleri test bataryasıyla
+sabitlenmiş), model sayıları yalnız VERİ olarak alıyor ve asla kendisi
+hesaplamıyor. Kalan dürüst sınır: sayıların ETRAFINDAKİ dil hâlâ modelin —
+"asla yeniden hesaplama" kuralı prompt'la ve canlı skor panosuyla denetleniyor.
+Kendi zaafını önce kendisi söyleyen, sonra kapatan proje = felsefenin canlı
+icrası. *Yanılabilirliğe göre tasarlandık — bizimki dahil.*
