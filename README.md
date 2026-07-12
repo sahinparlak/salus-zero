@@ -26,7 +26,8 @@ Built solo with Claude Code by a practicing pediatric surgery resident.
 
 ## Status — two products, one thesis
 
-The engine is live and plays end to end. Two doors share it:
+The engine is live and plays end to end. Two doors share one discipline —
+code owns every number and gate; the model only narrates:
 
 - **The scored night (training simulator).** A deterministic case engine — the
   clock, the stage physiology, the vitals and every lab value are computed in
@@ -53,7 +54,10 @@ diagnosis, future stages, ground truth, scoring — lives worker-side under
 [`functions/`](functions/) and never reaches the client bundle: the browser
 gets a public projection of the case and a state header per turn, nothing more.
 The model narrates and teaches; the code owns the clock, the physiology and
-the number.
+the number. Model: `claude-sonnet-5` (Messages API, SSE streaming; override
+with the `MODEL_ID` env var). Every turn calls Claude live — the engine
+currently requires network connectivity; an offline/low-connectivity mode is
+on the roadmap.
 
 ## Why an engine, not a chatbot
 
@@ -71,9 +75,10 @@ that must be *true* is code:
   turn resolver — not a hope that the model remembers its instructions.
 - **The number.** The 0–100 debrief and the PAS/Alvarado scores are auditable
   arithmetic; the model explains the score but cannot invent it.
-- **The refusals.** Doses are refused by prompt rails plus a code backstop; the
-  companion answers from a physician-approved reference, and the mimics are
-  forced into every assessment.
+- **The refusals.** Doses are refused by prompt rails, with a code backstop
+  that flags any slip visibly rather than silently redacting it; the companion
+  answers from a physician-approved reference, and the mimics are forced into
+  every assessment.
 
 A chatbot is built to agree with you. This engine is built to push back.
 
@@ -98,6 +103,7 @@ pnpm install
 cp .dev.vars.example .dev.vars      # then paste your Anthropic API key
 pnpm build                          # build the frontend into dist/
 pnpm preview                        # serves dist/ + functions with your key
+pnpm test                           # 64 deterministic tests over score.ts, loop.ts, consultScore.ts
 ```
 
 Open the printed URL and pick a door — **Bring the patient in front of you**

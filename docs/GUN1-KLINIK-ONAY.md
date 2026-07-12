@@ -133,7 +133,7 @@
    parçası olduğundan **skor matematiği değişmedi** (history_exam yine 9;
    etiketе "(erkekte) testis torsiyonu" eklendi).
 
-**Dokunulmayan:** `HACKATHON.md`/`ROADMAP.md`'deki **P1 ikincil DKA vakası**
+**Dokunulmayan:** `HACKATHON.md`/`ROADMAP.md`'deki (git-dışı çalışma notları) **P1 ikincil DKA vakası**
 (diyabetik yönetim, "dosya-değiş" demosu) ayrı bir gelecek senaryodur —
 apandisit-mimiği DKA ile ilgisizdir, bilerek korundu.
 
