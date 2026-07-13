@@ -52,6 +52,23 @@ surgery residents — Yasin Sipahi, Gökberk Özcan, Mustafa Özdemir, Turhan
 Çalışkan and Suat Kara — and by Assoc. Prof. Ahmet Burak Doğan, MD
 (pediatric surgery, Erciyes University).
 
+```mermaid
+flowchart LR
+    UI["browser — public projection only,<br/>no secrets in the bundle"]
+    subgraph worker["Cloudflare Pages Functions — worker-side truth"]
+        FN["/api/turn · /api/consult · /api/debrief"]
+        CODE["every number in code:<br/>clock · stage physiology<br/>score.ts · consultScore.ts"]
+        DATA["cases/ as data:<br/>hidden diagnosis · stages · resources"]
+        FN --- CODE
+        FN --- DATA
+    end
+    AN["Anthropic API<br/>claude-sonnet-5 · SSE"]
+    UI -- "free text + state header" --> FN
+    FN -- "worker-built prompt" --> AN
+    AN -- "token stream" --> FN
+    FN -- "plain-text stream" --> UI
+```
+
 **Architecture, in five lines.** The browser talks only to Cloudflare Pages
 Functions (`/api/*`); each function builds the prompt, calls Anthropic, and
 relays the SSE stream back as plain text. Everything secret — the hidden
