@@ -47,6 +47,11 @@ code owns every number and gate; the model only narrates:
 
 ![The consult companion mid-consult, GROUNDED badge lit: it reads the doctor back, shows PAS and Alvarado with their arithmetic line by line under EQUIVOCAL stamps — and a WBC just typed into the labs panel has already moved the live code-computed scores, while the banner holds the line: prototype, no doses, no directives — it augments your judgement](docs/img/consult-face.png)
 
+**First hands.** In its first days the engine was run by five pediatric
+surgery residents — Yasin Sipahi, Gökberk Özcan, Mustafa Özdemir, Turhan
+Çalışkan and Suat Kara — and by Assoc. Prof. Ahmet Burak Doğan, MD
+(pediatric surgery, Erciyes University).
+
 **Architecture, in five lines.** The browser talks only to Cloudflare Pages
 Functions (`/api/*`); each function builds the prompt, calls Anthropic, and
 relays the SSE stream back as plain text. Everything secret — the hidden
