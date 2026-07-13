@@ -51,8 +51,11 @@ code owns every number and gate; the model only narrates:
 
 **First hands.** In its first days the engine was run by five pediatric
 surgery residents — Yasin Sipahi, Gökberk Özcan, Mustafa Özdemir, Turhan
-Çalışkan and Suat Kara — and by Assoc. Prof. Ahmet Burak Doğan, MD
-(pediatric surgery, Erciyes University).
+Çalışkan and Suat Kara — by Assoc. Prof. Ahmet Burak Doğan, MD
+(pediatric surgery, Erciyes University), by Ömer Faruk Can, MD (pediatrics
+resident, Gazi University) — and by Savaş Yıldırım, MD, a general
+practitioner at Patnos State Hospital: a district hospital of the very kind
+this engine was built for.
 
 ```mermaid
 flowchart LR
