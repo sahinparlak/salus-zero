@@ -103,7 +103,7 @@ pnpm install
 cp .dev.vars.example .dev.vars      # then paste your Anthropic API key
 pnpm build                          # build the frontend into dist/
 pnpm preview                        # serves dist/ + functions with your key
-pnpm test                           # 64 deterministic tests over score.ts, loop.ts, consultScore.ts
+pnpm test                           # 72 deterministic tests over score.ts, loop.ts, consultScore.ts, rateLimit.ts
 ```
 
 Open the printed URL and pick a door — **Bring the patient in front of you**
