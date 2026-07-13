@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/sahinparlak/salus-zero/actions/workflows/ci.yml/badge.svg)](https://github.com/sahinparlak/salus-zero/actions/workflows/ci.yml)
 
-**A clinical training simulator for medicine where nothing is available.**
+**A clinical training simulator and bedside decision companion for medicine where nothing is available.**
 
 **Live demo:** https://saluszero.com — mirror: https://salus-zero.pages.dev
 
@@ -16,6 +16,10 @@ CT** — you decide with what the clinic actually has.
 
 SALUS Zero meets you twice: **train for that night** — or **bring the real
 patient** and decide with what you actually have.
+
+Appendicitis is only the pilot. The engine is domain-agnostic — physiology
+in code, knowledge in a signed expert document — so a new domain, surgical
+or medical, is data to add, not a rewrite.
 
 > **A new, from-scratch simulation engine built during the *Built with Claude:
 > Life Sciences* hackathon — part of the broader SALUS Zero vision.**
