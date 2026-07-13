@@ -20,7 +20,7 @@ patient** and decide with what you actually have.
 
 Built solo with Claude Code by a practicing pediatric surgery resident.
 
-![Ordering a CT in a hospital that has none: the request is struck out and stamped UNAVAILABLE HERE, and the night moves on](docs/img/unavailable-here.png)
+![The scored night in full: the CT order struck out and stamped UNAVAILABLE HERE, the switchboard call that comes back empty, the mother catching the refusal in your face — while the monitor holds SpO₂ and pain, the inventory lists what this hospital has tonight, and every move at the bedside costs minutes](docs/img/unavailable-here.png)
 
 ---
 
@@ -45,7 +45,7 @@ code owns every number and gate; the model only narrates:
   ([`functions/lib/consultScore.ts`](functions/lib/consultScore.ts)) and handed
   to the model as data.
 
-![The consult companion reading a real intake: PAS and Alvarado computed in code with their arithmetic shown line by line, an intake-inconsistency stamp, and the mimic board — what else is not yet excluded, each with a way to rule it out using only what the clinic has](docs/img/consult-face.png)
+![The consult companion mid-consult, GROUNDED badge lit: it reads the doctor back, shows PAS and Alvarado with their arithmetic line by line under EQUIVOCAL stamps — and a WBC just typed into the labs panel has already moved the live code-computed scores, while the banner holds the line: prototype, no doses, no directives — it augments your judgement](docs/img/consult-face.png)
 
 **Architecture, in five lines.** The browser talks only to Cloudflare Pages
 Functions (`/api/*`); each function builds the prompt, calls Anthropic, and
