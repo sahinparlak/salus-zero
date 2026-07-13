@@ -6,6 +6,8 @@
 
 **Live demo:** https://saluszero.com — mirror: https://salus-zero.pages.dev
 
+**Demo video (3 min):** https://youtu.be/nViBs7w1IeA
+
 Most medical training assumes a hospital that has everything. But most of the
 world's children are treated where there is no CT, no ultrasound, no surgeon in
 the building — only a clock and a single doctor. SALUS Zero trains
